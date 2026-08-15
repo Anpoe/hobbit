@@ -39,6 +39,7 @@ class HobbitPlugin extends Plugin {
     this.refreshTimer = null;
     this.editorChromeTimer = null;
     this.editorChromeRevision = 0;
+    this.hobbitNativeFullscreenOwned = false;
 
     this.registerView(HOME_VIEW_TYPE, (leaf) => new HobbitHomeView(leaf, this));
     this.registerView(DIARY_VIEW_TYPE, (leaf) => new HobbitDiaryView(leaf, this));
@@ -411,6 +412,47 @@ class HobbitPlugin extends Plugin {
     const isHobbitView =
       viewType === HOME_VIEW_TYPE || viewType === DIARY_VIEW_TYPE || isDiaryMarkdown;
     document.body?.classList.toggle("hobbit-mobile-fullscreen", isHobbitView);
+    this.updateNativeMobileFullscreen(isHobbitView);
+  }
+
+  updateNativeMobileFullscreen(shouldEnter) {
+    const body = document.body;
+    if (!body) return;
+    const isPhone = body.classList.contains("is-phone");
+    const mobileNavbar = this.app.mobileNavbar;
+
+    if (!shouldEnter || !isPhone) {
+      body.classList.remove("hobbit-native-fullscreen");
+      if (!isPhone && !this.hobbitNativeFullscreenOwned) return;
+      if (!this.hobbitNativeFullscreenOwned) return;
+      if (typeof mobileNavbar?.restoreNavigation === "function") {
+        body.classList.add("is-hidden-nav");
+        mobileNavbar.restoreNavigation(false);
+      } else {
+        body.classList.remove("is-hidden-nav");
+      }
+      this.hobbitNativeFullscreenOwned = false;
+      return;
+    }
+
+    if (shouldEnter) {
+      if (this.hobbitNativeFullscreenOwned) return;
+      if (body.classList.contains("is-hidden-nav")) return;
+      if (typeof mobileNavbar?.hideNavigation !== "function") return;
+
+      // Reuse Obsidian's own native status-bar transition, then immediately
+      // restore its navigation class so the bottom navigation stays visible.
+      try {
+        mobileNavbar.hideNavigation();
+      } catch (error) {
+        console.warn("Hobbit 无法启用移动端沉浸模式", error);
+        return;
+      }
+      body.classList.remove("is-hidden-nav");
+      this.hobbitNativeFullscreenOwned = true;
+      body.classList.add("hobbit-native-fullscreen");
+      return;
+    }
   }
 
   getMarkdownViewForFile(file) {

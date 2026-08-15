@@ -1569,4 +1569,10 @@
     min-height: 100%;
     border-radius: 0;
   }
+
+  body.is-phone.hobbit-native-fullscreen .view-content,
+  body.is-phone.hobbit-native-fullscreen .hobbit-view-content,
+  body.is-phone.hobbit-native-fullscreen .hobbit-diary-editor {
+    padding-top: 0 !important;
+  }
 }
