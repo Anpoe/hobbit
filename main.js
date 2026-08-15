@@ -1086,17 +1086,6 @@ class HobbitDiaryView extends ItemView {
 
     const shell = el("div", "hobbit-reader-shell");
     this.contentEl.appendChild(shell);
-    const topbar = el("header", "hobbit-reader-topbar");
-    shell.appendChild(topbar);
-    const back = iconButton("返回 Hobbit 主页", "arrow-left");
-    back.addEventListener("click", () => void this.plugin.activateHome());
-    topbar.appendChild(back);
-    topbar.appendChild(el("span", "hobbit-reader-topbar-label", "DAILY ARCHIVE"));
-    const topActions = el("div", "hobbit-reader-top-actions");
-    const editTop = button("编辑", "hobbit-quiet-button", "edit-3");
-    editTop.addEventListener("click", () => void this.plugin.openNativeEditor(file));
-    topActions.appendChild(editTop);
-    topbar.appendChild(topActions);
 
     const reader = el("article", "hobbit-reader");
     shell.appendChild(reader);
@@ -1107,13 +1096,16 @@ class HobbitDiaryView extends ItemView {
     if (images.length) {
       header.appendChild(el("div", "hobbit-reader-photo-count", `${images.length} 张照片`));
     }
-    reader.appendChild(header);
 
     const actionBar = el("div", "hobbit-reader-actions");
-    const edit = button("进入编辑", "hobbit-primary-button", "edit-3");
+    const home = iconButton("返回 Hobbit 主页", "home", "hobbit-reader-action-button");
+    home.addEventListener("click", () => void this.plugin.activateHome());
+    actionBar.appendChild(home);
+
+    const edit = iconButton("进入编辑", "edit-3", "hobbit-reader-action-button");
     edit.addEventListener("click", () => void this.plugin.openNativeEditor(file));
     actionBar.appendChild(edit);
-    const addPhoto = button("添加照片", "hobbit-quiet-button", "image-plus");
+    const addPhoto = iconButton("添加照片", "image-plus", "hobbit-reader-action-button");
     const photoInput = document.createElement("input");
     photoInput.type = "file";
     photoInput.accept = "image/*";
@@ -1130,23 +1122,24 @@ class HobbitDiaryView extends ItemView {
     });
     addPhoto.addEventListener("click", () => photoInput.click());
     actionBar.append(addPhoto, photoInput);
-    const addTag = button("添加标签", "hobbit-quiet-button", "tag");
+    const addTag = iconButton("添加标签", "tag", "hobbit-reader-action-button");
     addTag.addEventListener("click", () => {
       const value = window.prompt("输入标签，不需要输入 #");
       if (value) void this.plugin.addTag(file, value);
     });
     actionBar.appendChild(addTag);
-    const favoriteButton = button(
+    const favoriteButton = iconButton(
       favorite ? "取消收藏" : "收藏",
-      "hobbit-quiet-button",
-      "star"
+      "star",
+      "hobbit-reader-action-button"
     );
     favoriteButton.classList.toggle("is-active", favorite);
     favoriteButton.addEventListener("click", () => {
       void this.plugin.setFavorite(file, !favorite);
     });
     actionBar.appendChild(favoriteButton);
-    reader.appendChild(actionBar);
+    header.appendChild(actionBar);
+    reader.appendChild(header);
 
     if (frontmatter.tags || collectTags(frontmatter, body).length) {
       const tags = el("div", "hobbit-reader-tags");

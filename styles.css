@@ -1019,6 +1019,44 @@
   border-bottom: 1px solid var(--hobbit-line);
 }
 
+.hobbit-reader-header {
+  position: relative;
+}
+
+.hobbit-reader-header > .hobbit-reader-actions {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.hobbit-reader-action-button {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: var(--hobbit-muted);
+}
+
+.hobbit-reader-action-button svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.55;
+}
+
+.hobbit-reader-action-button.is-active {
+  color: var(--hobbit-accent);
+}
+
+.hobbit-reader-action-button.is-active svg {
+  fill: currentColor;
+  stroke: currentColor;
+}
+
 .hobbit-reader-body {
   padding: 34px 0;
   color: var(--hobbit-ink);
@@ -1540,6 +1578,16 @@
   .hobbit-editor-info-value {
     line-height: 1.5;
   }
+
+  /* Keep the mobile shell background fixed while lowering only its controls. */
+  .hobbit-topbar > * {
+    transform: translateY(20px);
+  }
+
+  .hobbit-editor-companion-main,
+  .hobbit-editor-info-panel {
+    transform: translateY(15px);
+  }
 }
 
 /* On Obsidian mobile, let Hobbit own the whole viewport while it is active. */
@@ -1574,5 +1622,19 @@
   body.is-phone.hobbit-native-fullscreen .hobbit-view-content,
   body.is-phone.hobbit-native-fullscreen .hobbit-diary-editor {
     padding-top: 0 !important;
+  }
+
+  .hobbit-reader-header > .hobbit-reader-actions {
+    right: 0;
+    bottom: 0;
+    gap: 3px;
+    padding: 0;
+    border-bottom: 0;
+  }
+
+  .hobbit-reader-action-button {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
   }
 }
