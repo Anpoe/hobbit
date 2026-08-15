@@ -1544,6 +1544,22 @@
 
 /* On Obsidian mobile, let Hobbit own the whole viewport while it is active. */
 @media (max-width: 700px) {
+  body.is-mobile.hobbit-mobile-fullscreen {
+    --hobbit-mobile-paper: #f7f2ea;
+    background: var(--hobbit-mobile-paper) !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen.theme-dark {
+    --hobbit-mobile-paper: #231f1b;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .app-container,
+  body.is-mobile.hobbit-mobile-fullscreen .workspace,
+  body.is-mobile.hobbit-mobile-fullscreen .workspace-leaf,
+  body.is-mobile.hobbit-mobile-fullscreen .workspace-leaf-content {
+    background: var(--hobbit-mobile-paper) !important;
+  }
+
   body.is-mobile.hobbit-mobile-fullscreen .workspace-tab-header-container,
   body.is-mobile.hobbit-mobile-fullscreen .workspace-leaf-header,
   body.is-mobile.hobbit-mobile-fullscreen .view-header {
