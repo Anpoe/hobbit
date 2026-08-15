@@ -1550,12 +1550,17 @@
     display: none !important;
   }
 
-  body.is-mobile.hobbit-mobile-fullscreen .workspace-leaf-content,
+  body.is-mobile.hobbit-mobile-fullscreen .workspace-leaf-content {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+  }
+
   body.is-mobile.hobbit-mobile-fullscreen .view-content,
   body.is-mobile.hobbit-mobile-fullscreen .hobbit-view-content,
   body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor {
     margin: 0 !important;
-    padding: 0 !important;
+    padding: max(18px, env(safe-area-inset-top)) 0 0 !important;
     border: 0 !important;
   }
 
