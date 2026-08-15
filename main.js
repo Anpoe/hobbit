@@ -85,14 +85,24 @@ class HobbitPlugin extends Plugin {
       this.app.metadataCache.on("changed", () => this.scheduleRefresh())
     );
     this.registerEvent(
-      this.app.workspace.on("active-leaf-change", () => this.scheduleEditorChromeRefresh())
+      this.app.workspace.on("active-leaf-change", (leaf) => {
+        this.scheduleEditorChromeRefresh();
+        this.updateMobileFullscreen(leaf);
+      })
     );
     this.registerEvent(
-      this.app.workspace.on("layout-change", () => this.scheduleEditorChromeRefresh())
+      this.app.workspace.on("layout-change", () => {
+        this.scheduleEditorChromeRefresh();
+        this.updateMobileFullscreen();
+      })
     );
     this.registerEvent(
-      this.app.workspace.on("file-open", () => this.scheduleEditorChromeRefresh())
+      this.app.workspace.on("file-open", () => {
+        this.scheduleEditorChromeRefresh();
+        this.updateMobileFullscreen();
+      })
     );
+    this.updateMobileFullscreen();
     this.scheduleEditorChromeRefresh();
   }
 
@@ -100,6 +110,7 @@ class HobbitPlugin extends Plugin {
     if (this.refreshTimer) window.clearTimeout(this.refreshTimer);
     if (this.editorChromeTimer) window.clearTimeout(this.editorChromeTimer);
     this.removeEditorChromeFromAllLeaves();
+    this.updateMobileFullscreen(null);
   }
 
   async activateHome() {
@@ -386,6 +397,22 @@ class HobbitPlugin extends Plugin {
     );
   }
 
+  updateMobileFullscreen(leaf = this.app.workspace.activeLeaf) {
+    const view = leaf?.view;
+    const viewType = view?.getViewType?.();
+    const file = view?.file;
+    const diaryFolder = normalizePath(this.settings.diaryFolder).replace(/\/$/, "");
+    const isDiaryMarkdown =
+      viewType === "markdown" &&
+      file instanceof TFile &&
+      (view.contentEl?.classList.contains("hobbit-diary-editor") ||
+        file.path === diaryFolder ||
+        file.path.startsWith(`${diaryFolder}/`));
+    const isHobbitView =
+      viewType === HOME_VIEW_TYPE || viewType === DIARY_VIEW_TYPE || isDiaryMarkdown;
+    document.body?.classList.toggle("hobbit-mobile-fullscreen", isHobbitView);
+  }
+
   getMarkdownViewForFile(file) {
     return this.app.workspace
       .getLeavesOfType("markdown")
@@ -413,6 +440,9 @@ class HobbitPlugin extends Plugin {
     const infoOpen = existing?.classList.contains("is-info-open") || false;
 
     contentEl.classList.add("hobbit-diary-editor");
+    if (this.app.workspace.activeLeaf?.view === view) {
+      this.updateMobileFullscreen(this.app.workspace.activeLeaf);
+    }
     contentEl.classList.toggle(
       "hobbit-generated-heading",
       isGeneratedDiaryHeading(body, date)

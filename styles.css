@@ -12,6 +12,8 @@
   background: var(--hobbit-paper);
   color: var(--hobbit-ink);
   overflow: auto;
+  margin: 0;
+  padding: 0 !important;
 }
 
 .theme-dark .hobbit-view-content,
@@ -1537,5 +1539,31 @@
 
   .hobbit-editor-info-value {
     line-height: 1.5;
+  }
+}
+
+/* On Obsidian mobile, let Hobbit own the whole viewport while it is active. */
+@media (max-width: 700px) {
+  body.is-mobile.hobbit-mobile-fullscreen .workspace-tab-header-container,
+  body.is-mobile.hobbit-mobile-fullscreen .workspace-leaf-header,
+  body.is-mobile.hobbit-mobile-fullscreen .view-header,
+  body.is-mobile.hobbit-mobile-fullscreen .mobile-navbar,
+  body.is-mobile.hobbit-mobile-fullscreen .mobile-toolbar {
+    display: none !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .workspace-leaf-content,
+  body.is-mobile.hobbit-mobile-fullscreen .view-content,
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-view-content,
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-shell,
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-reader-shell {
+    min-height: 100%;
+    border-radius: 0;
   }
 }
