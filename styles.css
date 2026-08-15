@@ -1604,15 +1604,16 @@
 
   .hobbit-editor-icon-button,
   .hobbit-editor-action-button {
-    width: 40px;
-    min-width: 40px;
-    height: 40px;
-    min-height: 40px;
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px;
     padding: 0;
     border: 0 !important;
     border-radius: 50%;
     background: transparent !important;
     box-shadow: none !important;
+    color: color-mix(in srgb, var(--hobbit-muted) 76%, var(--hobbit-paper) 24%) !important;
   }
 
   .hobbit-editor-action-button {
@@ -1621,9 +1622,11 @@
 
   .hobbit-editor-icon-button svg,
   .hobbit-editor-action-button .hobbit-button-icon svg {
-    width: 22px;
-    height: 22px;
-    stroke-width: 1.45;
+    width: 20px;
+    height: 20px;
+    color: inherit;
+    stroke: currentColor !important;
+    stroke-width: 1.35;
   }
 
   .hobbit-editor-icon-button:hover,
@@ -1632,12 +1635,12 @@
   .hobbit-editor-action-button:focus-visible,
   .hobbit-editor-action-button.is-active {
     background: transparent !important;
-    color: var(--hobbit-accent);
+    color: color-mix(in srgb, var(--hobbit-accent) 78%, var(--hobbit-paper) 22%) !important;
   }
 
   .hobbit-diary-editor .cm-content,
   .hobbit-diary-editor .markdown-preview-sizer {
-    padding-top: 22px;
+    padding-top: 12px;
   }
 }
 
