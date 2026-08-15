@@ -1545,6 +1545,7 @@
 /* On Obsidian mobile, let Hobbit own the whole viewport while it is active. */
 @media (max-width: 700px) {
   body.is-mobile.hobbit-mobile-fullscreen {
+    --hobbit-mobile-content-top: 32px;
     --hobbit-mobile-paper: #f7f2ea;
     background: var(--hobbit-mobile-paper) !important;
   }
@@ -1556,7 +1557,8 @@
   body.is-mobile.hobbit-mobile-fullscreen .app-container,
   body.is-mobile.hobbit-mobile-fullscreen .workspace,
   body.is-mobile.hobbit-mobile-fullscreen .workspace-leaf,
-  body.is-mobile.hobbit-mobile-fullscreen .workspace-leaf-content {
+  body.is-mobile.hobbit-mobile-fullscreen .workspace-leaf-content,
+  body.is-mobile.hobbit-mobile-fullscreen .view-content {
     background: var(--hobbit-mobile-paper) !important;
   }
 
@@ -1570,13 +1572,16 @@
     margin: 0 !important;
     padding: 0 !important;
     border: 0 !important;
+    min-height: 100dvh !important;
   }
 
   body.is-mobile.hobbit-mobile-fullscreen .view-content,
   body.is-mobile.hobbit-mobile-fullscreen .hobbit-view-content,
   body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor {
     margin: 0 !important;
-    padding: max(18px, env(safe-area-inset-top)) 0 0 !important;
+    min-height: 100dvh !important;
+    box-sizing: border-box;
+    padding: var(--hobbit-mobile-content-top) 0 0 !important;
     border: 0 !important;
   }
 
