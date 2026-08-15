@@ -1,0 +1,1356 @@
+const {
+  ItemView,
+  MarkdownRenderer,
+  Notice,
+  Plugin,
+  PluginSettingTab,
+  Setting,
+  TFile,
+  normalizePath,
+  setIcon,
+} = require("obsidian");
+
+const HOME_VIEW_TYPE = "hobbit-home";
+const DIARY_VIEW_TYPE = "hobbit-diary";
+
+const DEFAULT_SETTINGS = {
+  diaryFolder: "Hobbit/Diary",
+  attachmentFolder: "Hobbit/Attachments",
+};
+
+const IMAGE_EXTENSIONS = new Set([
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "svg",
+  "bmp",
+  "avif",
+]);
+
+class HobbitPlugin extends Plugin {
+  async onload() {
+    this.settings = Object.assign(
+      {},
+      DEFAULT_SETTINGS,
+      await this.loadData()
+    );
+    this.refreshTimer = null;
+    this.editorChromeTimer = null;
+    this.editorChromeRevision = 0;
+
+    this.registerView(HOME_VIEW_TYPE, (leaf) => new HobbitHomeView(leaf, this));
+    this.registerView(DIARY_VIEW_TYPE, (leaf) => new HobbitDiaryView(leaf, this));
+
+    this.addRibbonIcon("book-open", "打开 Hobbit 主页", () => {
+      void this.activateHome();
+    });
+
+    this.addCommand({
+      id: "open-home",
+      name: "打开 Hobbit 主页",
+      callback: () => void this.activateHome(),
+    });
+
+    this.addCommand({
+      id: "write-today",
+      name: "写今天的日记",
+      callback: () => void this.createTodayDiary(),
+    });
+
+    this.addCommand({
+      id: "mark-current-as-diary",
+      name: "将当前笔记标记为 Hobbit 日记",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file) return false;
+        if (!checking) void this.markAsDiary(file);
+        return true;
+      },
+    });
+
+    this.addSettingTab(new HobbitSettingTab(this.app, this));
+
+    this.registerEvent(
+      this.app.vault.on("create", () => this.scheduleRefresh())
+    );
+    this.registerEvent(
+      this.app.vault.on("modify", () => this.scheduleRefresh())
+    );
+    this.registerEvent(
+      this.app.vault.on("delete", () => this.scheduleRefresh())
+    );
+    this.registerEvent(
+      this.app.metadataCache.on("changed", () => this.scheduleRefresh())
+    );
+    this.registerEvent(
+      this.app.workspace.on("active-leaf-change", () => this.scheduleEditorChromeRefresh())
+    );
+    this.registerEvent(
+      this.app.workspace.on("layout-change", () => this.scheduleEditorChromeRefresh())
+    );
+    this.registerEvent(
+      this.app.workspace.on("file-open", () => this.scheduleEditorChromeRefresh())
+    );
+    this.scheduleEditorChromeRefresh();
+  }
+
+  onunload() {
+    if (this.refreshTimer) window.clearTimeout(this.refreshTimer);
+    if (this.editorChromeTimer) window.clearTimeout(this.editorChromeTimer);
+    this.removeEditorChromeFromAllLeaves();
+  }
+
+  async activateHome() {
+    const existing = this.app.workspace
+      .getLeavesOfType(HOME_VIEW_TYPE)
+      .at(0);
+    const leaf = existing ?? this.app.workspace.getLeaf("tab");
+    await leaf.setViewState({ type: HOME_VIEW_TYPE, active: true });
+    this.app.workspace.revealLeaf(leaf);
+  }
+
+  async openDiary(path) {
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) {
+      new Notice("Hobbit 找不到这篇日记");
+      return;
+    }
+
+    const existing = this.app.workspace
+      .getLeavesOfType(DIARY_VIEW_TYPE)
+      .at(0);
+    const leaf = existing ?? this.app.workspace.getLeaf("tab");
+    await leaf.setViewState({
+      type: DIARY_VIEW_TYPE,
+      state: { path: file.path },
+      active: true,
+    });
+    this.app.workspace.revealLeaf(leaf);
+  }
+
+  async openNativeEditor(file) {
+    if (!(file instanceof TFile)) return;
+    const leaf = this.app.workspace.getLeaf("tab");
+    await leaf.openFile(file, { active: true });
+    this.scheduleEditorChromeRefresh();
+  }
+
+  async createTodayDiary() {
+    const date = localDateKey(new Date());
+    const file = await this.createDiaryForDate(date);
+    await this.openNativeEditor(file);
+  }
+
+  async createDiaryForDate(date) {
+    await this.ensureFolder(this.settings.diaryFolder);
+    const path = normalizePath(`${this.settings.diaryFolder}/${date}.md`);
+    const existing = this.app.vault.getAbstractFileByPath(path);
+    if (existing instanceof TFile) return existing;
+
+    const content = [
+      "---",
+      "diary: true",
+      `date: ${date}`,
+      "favorite: false",
+      "tags: []",
+      "---",
+      "",
+      "",
+    ].join("\n");
+    return this.app.vault.create(path, content);
+  }
+
+  async markAsDiary(file) {
+    if (!(file instanceof TFile) || file.extension !== "md") return;
+    await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+      frontmatter.diary = true;
+      if (!frontmatter.date) {
+        const fromName = dateFromFilename(file.basename);
+        if (fromName) frontmatter.date = fromName;
+      }
+    });
+    new Notice("已将当前笔记标记为 Hobbit 日记");
+    this.scheduleEditorChromeRefresh();
+    await this.activateHome();
+  }
+
+  async ensureFolder(folderPath) {
+    const normalized = normalizePath(folderPath).replace(/\/$/, "");
+    if (!normalized) return;
+    const parts = normalized.split("/");
+    let current = "";
+    for (const part of parts) {
+      current = current ? `${current}/${part}` : part;
+      if (!this.app.vault.getAbstractFileByPath(current)) {
+        await this.app.vault.createFolder(current);
+      }
+    }
+  }
+
+  async getDiaryEntries() {
+    const files = this.app.vault.getMarkdownFiles();
+    const entries = [];
+    for (const file of files) {
+      const raw = await this.app.vault.cachedRead(file);
+      const frontmatter = parseFrontmatter(raw);
+      if (!isDiary(frontmatter)) continue;
+
+      const body = stripFrontmatter(raw);
+      const date = normalizeDate(frontmatter.date) || dateFromFilename(file.basename);
+      const safeDate = date || localDateKey(new Date(file.stat.mtime));
+      const title =
+        cleanText(frontmatter.title) ||
+        extractHeading(body) ||
+        formatLongDate(safeDate);
+      const imageFiles = this.resolveImages(raw, file);
+      entries.push({
+        file,
+        raw,
+        body,
+        frontmatter,
+        date: safeDate,
+        title,
+        preview: makePreview(body, title),
+        tags: collectTags(frontmatter, body),
+        favorite: frontmatter.favorite === true || frontmatter.favorite === "true",
+        images: imageFiles,
+      });
+    }
+
+    entries.sort((a, b) => {
+      const dateOrder = b.date.localeCompare(a.date);
+      if (dateOrder !== 0) return dateOrder;
+      return b.file.stat.mtime - a.file.stat.mtime;
+    });
+    return entries;
+  }
+
+  resolveImages(raw, sourceFile) {
+    const links = [];
+    const embedPattern = /!\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/g;
+    const markdownPattern = /!\[[^\]]*\]\(([^)]+)\)/g;
+    let match;
+    while ((match = embedPattern.exec(raw))) links.push(match[1].trim());
+    while ((match = markdownPattern.exec(raw))) links.push(match[1].trim());
+
+    const result = [];
+    const seen = new Set();
+    for (const link of links) {
+      if (/^(https?:|data:)/i.test(link)) continue;
+      const destination = this.app.metadataCache.getFirstLinkpathDest(
+        link,
+        sourceFile.path
+      );
+      if (!destination || !IMAGE_EXTENSIONS.has(destination.extension.toLowerCase())) {
+        continue;
+      }
+      if (seen.has(destination.path)) continue;
+      seen.add(destination.path);
+      result.push(destination);
+    }
+    return result;
+  }
+
+  async setFavorite(file, value) {
+    await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+      frontmatter.diary = true;
+      frontmatter.favorite = value;
+    });
+    this.scheduleRefresh();
+  }
+
+  async addTag(file, rawTag) {
+    const tag = rawTag.trim().replace(/^#/, "");
+    if (!tag) return;
+    await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+      frontmatter.diary = true;
+      const current = normalizeTags(frontmatter.tags);
+      if (!current.includes(tag)) current.push(tag);
+      frontmatter.tags = current;
+    });
+    new Notice(`已添加标签 #${tag}`);
+    this.scheduleRefresh();
+  }
+
+  async addPhoto(file, imageFile, editorView = null) {
+    if (!(file instanceof TFile) || !imageFile) return;
+    await this.ensureFolder(this.settings.attachmentFolder);
+    const ext = extensionFromName(imageFile.name) || "png";
+    const stem = sanitizeFilename(imageFile.name.replace(/\.[^.]+$/, "")) || "photo";
+    const timestamp = Date.now();
+    let filename = `${file.basename}-${timestamp}-${stem}.${ext}`;
+    let attachmentPath = normalizePath(`${this.settings.attachmentFolder}/${filename}`);
+    let collision = 2;
+    while (this.app.vault.getAbstractFileByPath(attachmentPath)) {
+      filename = `${file.basename}-${timestamp}-${stem}-${collision}.${ext}`;
+      attachmentPath = normalizePath(`${this.settings.attachmentFolder}/${filename}`);
+      collision += 1;
+    }
+    const data = await imageFile.arrayBuffer();
+    await this.app.vault.createBinary(attachmentPath, data);
+    const link = `![[${attachmentPath}]]`;
+    const targetView = editorView || this.getMarkdownViewForFile(file);
+    const editor = targetView?.file?.path === file.path ? targetView.editor : null;
+    const cursor = editor?.getCursor?.();
+    if (editor && cursor && typeof editor.replaceRange === "function") {
+      const line = typeof editor.getLine === "function" ? editor.getLine(cursor.line) : "";
+      const beforeCursor = line.slice(0, cursor.ch);
+      const prefix = beforeCursor.trim() ? "\n\n" : "";
+      editor.replaceRange(`${prefix}${link}\n`, cursor);
+    } else {
+      const current = await this.app.vault.read(file);
+      const next = `${current.replace(/\s*$/, "")}\n\n${link}\n`;
+      await this.app.vault.modify(file, next);
+    }
+    new Notice("照片已加入日记");
+    this.scheduleRefresh();
+    this.scheduleEditorChromeRefresh();
+  }
+
+  scheduleRefresh() {
+    if (this.refreshTimer) window.clearTimeout(this.refreshTimer);
+    this.refreshTimer = window.setTimeout(() => {
+      this.refreshTimer = null;
+      this.refreshViews();
+    }, 180);
+  }
+
+  refreshViews() {
+    for (const leaf of this.app.workspace.getLeavesOfType(HOME_VIEW_TYPE)) {
+      leaf.view.refresh?.();
+    }
+    for (const leaf of this.app.workspace.getLeavesOfType(DIARY_VIEW_TYPE)) {
+      leaf.view.refresh?.();
+    }
+  }
+
+  scheduleEditorChromeRefresh() {
+    if (this.editorChromeTimer) window.clearTimeout(this.editorChromeTimer);
+    this.editorChromeTimer = window.setTimeout(() => {
+      this.editorChromeTimer = null;
+      void this.refreshEditorChrome();
+    }, 80);
+  }
+
+  async refreshEditorChrome() {
+    const revision = ++this.editorChromeRevision;
+    const leaves = this.app.workspace.getLeavesOfType("markdown");
+    for (const leaf of leaves) {
+      if (revision !== this.editorChromeRevision) return;
+      await this.updateEditorChrome(leaf, revision);
+    }
+  }
+
+  async updateEditorChrome(leaf, revision) {
+    const view = leaf?.view;
+    const contentEl = view?.contentEl;
+    if (!contentEl || view?.getViewType?.() !== "markdown") return;
+
+    const file = view.file;
+    if (!(file instanceof TFile) || file.extension !== "md") {
+      this.removeEditorChrome(view);
+      return;
+    }
+
+    const raw = await this.app.vault.cachedRead(file);
+    if (revision !== this.editorChromeRevision) return;
+    const frontmatter = parseFrontmatter(raw);
+    if (!isDiary(frontmatter)) {
+      this.removeEditorChrome(view);
+      return;
+    }
+
+    const entries = await this.getDiaryEntries();
+    if (revision !== this.editorChromeRevision) return;
+    this.renderEditorChrome(view, file, raw, frontmatter, entries);
+  }
+
+  removeEditorChromeFromAllLeaves() {
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+      this.removeEditorChrome(leaf.view);
+    }
+  }
+
+  removeEditorChrome(view) {
+    const contentEl = view?.contentEl;
+    if (!contentEl) return;
+    for (const child of Array.from(contentEl.children)) {
+      if (child.classList?.contains("hobbit-editor-companion")) child.remove();
+    }
+    contentEl.classList.remove(
+      "hobbit-diary-editor",
+      "hobbit-show-properties",
+      "hobbit-generated-heading"
+    );
+  }
+
+  getMarkdownViewForFile(file) {
+    return this.app.workspace
+      .getLeavesOfType("markdown")
+      .map((leaf) => leaf.view)
+      .find((view) => view?.file?.path === file.path) || null;
+  }
+
+  renderEditorChrome(view, file, raw, frontmatter, entries) {
+    const contentEl = view.contentEl;
+    const body = stripFrontmatter(raw);
+    const date =
+      normalizeDate(frontmatter.date) ||
+      dateFromFilename(file.basename) ||
+      localDateKey(new Date(file.stat.mtime));
+    const tags = collectTags(frontmatter, body);
+    const images = this.resolveImages(raw, file);
+    const favorite = frontmatter.favorite === true || frontmatter.favorite === "true";
+    const statBody = isGeneratedDiaryHeading(body, date) ? removeFirstHeading(body) : body;
+    const index = entries.findIndex((entry) => entry.file.path === file.path);
+    const previous = index >= 0 ? entries[index + 1] : null;
+    const next = index > 0 ? entries[index - 1] : null;
+    const existing = Array.from(contentEl.children).find((child) =>
+      child.classList?.contains("hobbit-editor-companion")
+    );
+    const infoOpen = existing?.classList.contains("is-info-open") || false;
+
+    contentEl.classList.add("hobbit-diary-editor");
+    contentEl.classList.toggle(
+      "hobbit-generated-heading",
+      isGeneratedDiaryHeading(body, date)
+    );
+
+    const chrome = existing || el("div", "hobbit-editor-companion");
+    chrome.classList.toggle("is-info-open", infoOpen);
+    chrome.replaceChildren();
+    if (!existing) contentEl.prepend(chrome);
+
+    const main = el("div", "hobbit-editor-companion-main");
+    const context = el("div", "hobbit-editor-context");
+    context.appendChild(el("span", "hobbit-editor-kicker", "HOBBIT / DAILY ARCHIVE"));
+    context.appendChild(el("strong", "hobbit-editor-date", formatLongDate(date)));
+    const status = [weekdayFor(date), `${countWords(statBody)} 字`];
+    if (images.length) status.push(`${images.length} 张照片`);
+    context.appendChild(el("span", "hobbit-editor-status", status.join(" · ")));
+    main.appendChild(context);
+
+    const actions = el("div", "hobbit-editor-companion-actions");
+    const homeButton = iconButton("打开 Hobbit 主页", "home");
+    homeButton.classList.add("hobbit-editor-icon-button");
+    homeButton.addEventListener("click", () => void this.activateHome());
+    actions.appendChild(homeButton);
+
+    const previousButton = iconButton(
+      previous ? `前一天 · ${formatMonthDay(previous.date)}` : "没有更早的日记",
+      "chevron-left"
+    );
+    previousButton.classList.add("hobbit-editor-icon-button");
+    previousButton.disabled = !previous;
+    previousButton.addEventListener("click", () => {
+      if (previous) void this.openNativeEditor(previous.file);
+    });
+    actions.appendChild(previousButton);
+
+    const nextButton = iconButton(
+      next ? `后一天 · ${formatMonthDay(next.date)}` : "没有更新的日记",
+      "chevron-right"
+    );
+    nextButton.classList.add("hobbit-editor-icon-button");
+    nextButton.disabled = !next;
+    nextButton.addEventListener("click", () => {
+      if (next) void this.openNativeEditor(next.file);
+    });
+    actions.appendChild(nextButton);
+
+    const photoButton = button("照片", "hobbit-editor-action-button", "image-plus");
+    photoButton.setAttribute("aria-label", "添加照片");
+    photoButton.title = "添加照片";
+    const photoInput = document.createElement("input");
+    photoInput.type = "file";
+    photoInput.accept = "image/*";
+    photoInput.multiple = true;
+    photoInput.className = "hobbit-hidden-input";
+    photoInput.addEventListener("change", () => {
+      const selectedFiles = Array.from(photoInput.files || []);
+      void (async () => {
+        for (const selected of selectedFiles) {
+          await this.addPhoto(file, selected, view);
+        }
+      })();
+      photoInput.value = "";
+    });
+    photoButton.addEventListener("click", () => photoInput.click());
+    actions.append(photoButton, photoInput);
+
+    const tagButton = button("标签", "hobbit-editor-action-button", "tag");
+    tagButton.setAttribute("aria-label", "添加标签");
+    tagButton.title = "添加标签";
+    tagButton.addEventListener("click", () => {
+      const value = window.prompt("输入标签，不需要输入 #");
+      if (value) {
+        void this.addTag(file, value).then(() => this.scheduleEditorChromeRefresh());
+      }
+    });
+    actions.appendChild(tagButton);
+
+    const favoriteButton = button(
+      favorite ? "已收藏" : "收藏",
+      "hobbit-editor-action-button",
+      "star"
+    );
+    favoriteButton.setAttribute("aria-label", favorite ? "取消收藏" : "收藏");
+    favoriteButton.title = favorite ? "取消收藏" : "收藏";
+    favoriteButton.classList.toggle("is-active", favorite);
+    favoriteButton.addEventListener("click", () => {
+      void this.setFavorite(file, !favorite).then(() => this.scheduleEditorChromeRefresh());
+    });
+    actions.appendChild(favoriteButton);
+
+    const infoButton = button("日记信息", "hobbit-editor-action-button", "info");
+    infoButton.setAttribute("aria-label", "日记信息");
+    infoButton.title = "日记信息";
+    infoButton.setAttribute("aria-expanded", String(infoOpen));
+    infoButton.addEventListener("click", () => {
+      const open = chrome.classList.toggle("is-info-open");
+      infoButton.setAttribute("aria-expanded", String(open));
+    });
+    actions.appendChild(infoButton);
+
+    const readerButton = button("阅读", "hobbit-editor-action-button", "book-open");
+    readerButton.setAttribute("aria-label", "阅读模式");
+    readerButton.title = "阅读模式";
+    readerButton.addEventListener("click", () => void this.openDiary(file.path));
+    actions.appendChild(readerButton);
+
+    main.appendChild(actions);
+    chrome.appendChild(main);
+
+    const info = el("div", "hobbit-editor-info-panel");
+    info.setAttribute("aria-hidden", String(!infoOpen));
+    const infoSummary = el("div", "hobbit-editor-info-summary");
+    infoSummary.append(
+      el("span", "hobbit-editor-info-label", "这篇日记"),
+      el("span", "hobbit-editor-info-value", `${formatLongDate(date)} · ${countWords(statBody)} 字${images.length ? ` · ${images.length} 张照片` : ""}`)
+    );
+    info.appendChild(infoSummary);
+    const tagRow = el("div", "hobbit-editor-info-row");
+    tagRow.appendChild(el("span", "hobbit-editor-info-label", "标签"));
+    const tagList = el("div", "hobbit-editor-info-tags");
+    if (tags.length) {
+      for (const tag of tags) tagList.appendChild(el("span", "hobbit-tag", `#${tag}`));
+    } else {
+      tagList.appendChild(el("span", "hobbit-editor-empty-value", "还没有标签"));
+    }
+    tagRow.appendChild(tagList);
+    info.appendChild(tagRow);
+
+    const infoActions = el("div", "hobbit-editor-info-actions");
+    const showProperties = contentEl.classList.contains("hobbit-show-properties");
+    const propertyButton = button(
+      showProperties ? "隐藏原生属性" : "显示原生属性",
+      "hobbit-editor-detail-button",
+      "sliders-horizontal"
+    );
+    propertyButton.addEventListener("click", () => {
+      const visible = contentEl.classList.toggle("hobbit-show-properties");
+      propertyButton.replaceChildren();
+      setIcon(propertyButton, "sliders-horizontal");
+      propertyButton.appendChild(document.createTextNode(visible ? "隐藏原生属性" : "显示原生属性"));
+    });
+    infoActions.appendChild(propertyButton);
+    info.appendChild(infoActions);
+    chrome.appendChild(info);
+  }
+
+  async saveSettings() {
+    await this.saveData(this.settings);
+    this.refreshViews();
+  }
+}
+
+class HobbitHomeView extends ItemView {
+  constructor(leaf, plugin) {
+    super(leaf);
+    this.plugin = plugin;
+    this.filter = "all";
+    this.searchText = "";
+    this.dateFilter = null;
+    this.calendarDate = new Date();
+    this.entries = [];
+  }
+
+  getViewType() {
+    return HOME_VIEW_TYPE;
+  }
+
+  getDisplayText() {
+    return "Hobbit";
+  }
+
+  getIcon() {
+    return "book-open";
+  }
+
+  async onOpen() {
+    this.render();
+    await this.refresh();
+  }
+
+  async onClose() {
+    this.contentEl.replaceChildren();
+  }
+
+  async refresh() {
+    if (!this.listEl) return;
+    this.entries = await this.plugin.getDiaryEntries();
+    this.updateHero();
+    this.renderCalendar();
+    this.renderList();
+  }
+
+  render() {
+    this.contentEl.replaceChildren();
+    this.contentEl.className = "view-content hobbit-view-content";
+
+    const shell = el("div", "hobbit-shell");
+    this.contentEl.appendChild(shell);
+
+    const topbar = el("header", "hobbit-topbar");
+    shell.appendChild(topbar);
+    const brand = el("div", "hobbit-brand");
+    const brandIcon = el("span", "hobbit-brand-icon");
+    setIcon(brandIcon, "book-open");
+    brand.append(brandIcon, el("span", "hobbit-brand-name", "Hobbit"));
+    topbar.appendChild(brand);
+
+    const topActions = el("div", "hobbit-top-actions");
+    const searchWrap = el("label", "hobbit-search-wrap");
+    const searchIcon = el("span", "hobbit-search-icon");
+    setIcon(searchIcon, "search");
+    const search = document.createElement("input");
+    search.className = "hobbit-search";
+    search.placeholder = "搜索日记";
+    search.value = this.searchText;
+    search.addEventListener("input", () => {
+      this.searchText = search.value;
+      this.renderList();
+    });
+    searchWrap.append(searchIcon, search);
+    topActions.appendChild(searchWrap);
+    const refreshButton = iconButton("刷新", "refresh-cw");
+    refreshButton.addEventListener("click", () => void this.refresh());
+    topActions.appendChild(refreshButton);
+    topbar.appendChild(topActions);
+
+    const layout = el("div", "hobbit-layout");
+    shell.appendChild(layout);
+
+    const sidebar = el("aside", "hobbit-sidebar");
+    layout.appendChild(sidebar);
+    const statBlock = el("div", "hobbit-stat-block");
+    this.statTotal = el("strong", "hobbit-stat-number", "0");
+    statBlock.append(this.statTotal, el("span", "hobbit-stat-label", "篇日记"));
+    sidebar.appendChild(statBlock);
+
+    this.calendarEl = el("div", "hobbit-calendar-panel");
+    sidebar.appendChild(this.calendarEl);
+
+    const navTitle = el("div", "hobbit-sidebar-label", "档案");
+    sidebar.appendChild(navTitle);
+    this.navEl = el("div", "hobbit-nav-list");
+    sidebar.appendChild(this.navEl);
+    for (const item of [
+      ["all", "全部日记", "layout-list"],
+      ["favorite", "收藏", "star"],
+      ["photo", "照片", "image"],
+    ]) {
+      const button = navButton(item[1], item[2]);
+      button.dataset.filter = item[0];
+      button.addEventListener("click", () => {
+        this.filter = item[0];
+        this.dateFilter = null;
+        this.updateNavState();
+        this.renderList();
+      });
+      this.navEl.appendChild(button);
+    }
+    this.updateNavState();
+
+    const main = el("main", "hobbit-main");
+    layout.appendChild(main);
+
+    const hero = el("section", "hobbit-hero");
+    main.appendChild(hero);
+    const heroCopy = el("div", "hobbit-hero-copy");
+    hero.appendChild(heroCopy);
+    heroCopy.appendChild(el("div", "hobbit-eyebrow", "PRIVATE ARCHIVE / TODAY"));
+    this.heroTitle = el("h1", "hobbit-hero-title", "今天，留下什么？");
+    heroCopy.appendChild(this.heroTitle);
+    this.heroStatus = el(
+      "p",
+      "hobbit-hero-status",
+      "你的每日档案会从这里开始。"
+    );
+    heroCopy.appendChild(this.heroStatus);
+    const heroActions = el("div", "hobbit-hero-actions");
+    this.heroPrimary = button("写今天的日记", "hobbit-primary-button", "pen-line");
+    this.heroPrimary.addEventListener("click", () => {
+      void this.openTodayFromHero();
+    });
+    heroActions.appendChild(this.heroPrimary);
+    this.heroSecondary = button("查看今天", "hobbit-quiet-button", "arrow-up-right");
+    this.heroSecondary.addEventListener("click", () => {
+      const today = this.entries.find((entry) => entry.date === localDateKey(new Date()));
+      if (today) void this.plugin.openDiary(today.file.path);
+    });
+    heroActions.appendChild(this.heroSecondary);
+    heroCopy.appendChild(heroActions);
+
+    const heroMark = el("div", "hobbit-hero-mark");
+    heroMark.appendChild(el("span", "hobbit-hero-date", formatMonthDay(localDateKey(new Date()))));
+    heroMark.appendChild(el("span", "hobbit-hero-word", "记下今天"));
+    hero.appendChild(heroMark);
+
+    const listHeader = el("div", "hobbit-list-header");
+    const listHeading = el("div", "hobbit-list-heading");
+    listHeading.appendChild(el("span", "hobbit-eyebrow", "YOUR DAYS"));
+    this.listTitle = el("h2", "hobbit-section-title", "全部日记");
+    listHeading.appendChild(this.listTitle);
+    listHeader.appendChild(listHeading);
+    this.countEl = el("span", "hobbit-list-count", "0 篇");
+    listHeader.appendChild(this.countEl);
+    main.appendChild(listHeader);
+
+    this.dateFilterEl = el("button", "hobbit-date-filter");
+    this.dateFilterEl.addEventListener("click", () => {
+      this.dateFilter = null;
+      this.renderList();
+    });
+    main.appendChild(this.dateFilterEl);
+
+    this.listEl = el("div", "hobbit-entry-list");
+    main.appendChild(this.listEl);
+  }
+
+  async openTodayFromHero() {
+    const today = this.entries.find((entry) => entry.date === localDateKey(new Date()));
+    if (today) {
+      await this.plugin.openNativeEditor(today.file);
+      return;
+    }
+    await this.plugin.createTodayDiary();
+  }
+
+  updateHero() {
+    if (!this.heroStatus) return;
+    const today = this.entries.find((entry) => entry.date === localDateKey(new Date()));
+    if (today) {
+      this.heroTitle.textContent = today.title;
+      this.heroStatus.textContent = "今天的档案已经打开，继续写下去。";
+      this.heroPrimary.replaceChildren();
+      setIcon(this.heroPrimary, "edit-3");
+      this.heroPrimary.appendChild(document.createTextNode("继续编辑今天"));
+      this.heroSecondary.classList.remove("is-hidden");
+    } else {
+      this.heroTitle.textContent = "今天，留下什么？";
+      this.heroStatus.textContent = "你的每日档案会从这里开始。";
+      this.heroPrimary.replaceChildren();
+      setIcon(this.heroPrimary, "pen-line");
+      this.heroPrimary.appendChild(document.createTextNode("写今天的日记"));
+      this.heroSecondary.classList.add("is-hidden");
+    }
+    this.statTotal.textContent = String(this.entries.length);
+  }
+
+  updateNavState() {
+    if (!this.navEl) return;
+    for (const item of this.navEl.querySelectorAll("[data-filter]")) {
+      item.classList.toggle("is-active", item.dataset.filter === this.filter);
+    }
+  }
+
+  renderCalendar() {
+    if (!this.calendarEl) return;
+    this.calendarEl.replaceChildren();
+    const year = this.calendarDate.getFullYear();
+    const month = this.calendarDate.getMonth();
+    const header = el("div", "hobbit-calendar-header");
+    const prev = iconButton("上个月", "chevron-left");
+    prev.addEventListener("click", () => {
+      this.calendarDate = new Date(year, month - 1, 1);
+      this.renderCalendar();
+    });
+    const next = iconButton("下个月", "chevron-right");
+    next.addEventListener("click", () => {
+      this.calendarDate = new Date(year, month + 1, 1);
+      this.renderCalendar();
+    });
+    header.append(
+      prev,
+      el("span", "hobbit-calendar-month", `${year}年${month + 1}月`),
+      next
+    );
+    this.calendarEl.appendChild(header);
+
+    const weekdays = el("div", "hobbit-calendar-weekdays");
+    for (const day of ["一", "二", "三", "四", "五", "六", "日"]) {
+      weekdays.appendChild(el("span", "hobbit-calendar-weekday", day));
+    }
+    this.calendarEl.appendChild(weekdays);
+
+    const grid = el("div", "hobbit-calendar-grid");
+    const first = new Date(year, month, 1);
+    const offset = (first.getDay() + 6) % 7;
+    const days = new Date(year, month + 1, 0).getDate();
+    const diaryDates = new Set(this.entries.map((entry) => entry.date));
+    for (let i = 0; i < offset; i++) grid.appendChild(el("span", "hobbit-calendar-empty"));
+    for (let day = 1; day <= days; day++) {
+      const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const cell = document.createElement("button");
+      cell.className = "hobbit-calendar-day";
+      cell.textContent = String(day);
+      cell.title = date;
+      if (diaryDates.has(date)) cell.classList.add("has-diary");
+      if (date === localDateKey(new Date())) cell.classList.add("is-today");
+      if (date === this.dateFilter) cell.classList.add("is-selected");
+      cell.addEventListener("click", () => {
+        const entry = this.entries.find((item) => item.date === date);
+        if (entry) {
+          void this.plugin.openDiary(entry.file.path);
+        } else {
+          this.dateFilter = date;
+          this.filter = "all";
+          this.updateNavState();
+          this.renderList();
+        }
+      });
+      grid.appendChild(cell);
+    }
+    this.calendarEl.appendChild(grid);
+  }
+
+  renderList() {
+    if (!this.listEl) return;
+    this.listEl.replaceChildren();
+    let items = this.entries;
+    if (this.filter === "favorite") items = items.filter((entry) => entry.favorite);
+    if (this.filter === "photo") items = items.filter((entry) => entry.images.length > 0);
+    if (this.dateFilter) items = items.filter((entry) => entry.date === this.dateFilter);
+
+    const query = this.searchText.trim().toLowerCase();
+    if (query) {
+      items = items.filter((entry) => {
+        const haystack = [entry.title, entry.preview, entry.date, ...entry.tags]
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(query);
+      });
+    }
+
+    const filterNames = { all: "全部日记", favorite: "收藏", photo: "照片" };
+    this.listTitle.textContent = this.dateFilter
+      ? `${this.dateFilter} 的日记`
+      : filterNames[this.filter];
+    this.countEl.textContent = `${items.length} 篇`;
+    this.dateFilterEl.textContent = this.dateFilter ? `仅显示 ${this.dateFilter}  ×` : "";
+    this.dateFilterEl.classList.toggle("is-visible", Boolean(this.dateFilter));
+
+    if (items.length === 0) {
+      const empty = el("div", "hobbit-empty-state");
+      const icon = el("div", "hobbit-empty-icon");
+      setIcon(icon, this.entries.length === 0 ? "feather" : "search-x");
+      empty.appendChild(icon);
+      empty.appendChild(
+        el(
+          "h3",
+          "hobbit-empty-title",
+          this.entries.length === 0 ? "这里还没有日记" : "没有找到这样的日记"
+        )
+      );
+      empty.appendChild(
+        el(
+          "p",
+          "hobbit-empty-text",
+          this.entries.length === 0
+            ? "从今天开始，给自己留下一页私人档案。"
+            : "试试换一个关键词或筛选条件。"
+        )
+      );
+      if (this.entries.length === 0) {
+        const start = button("写今天的日记", "hobbit-primary-button", "pen-line");
+        start.addEventListener("click", () => void this.plugin.createTodayDiary());
+        empty.appendChild(start);
+      }
+      this.listEl.appendChild(empty);
+      return;
+    }
+
+    for (const entry of items) {
+      this.listEl.appendChild(this.renderEntryCard(entry));
+    }
+  }
+
+  renderEntryCard(entry) {
+    const card = el("article", "hobbit-entry-card");
+    card.tabIndex = 0;
+    card.addEventListener("click", () => void this.plugin.openDiary(entry.file.path));
+    card.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        void this.plugin.openDiary(entry.file.path);
+      }
+    });
+
+    const dateBlock = el("div", "hobbit-entry-date");
+    dateBlock.appendChild(el("strong", "hobbit-entry-day", dayNumber(entry.date)));
+    dateBlock.appendChild(el("span", "hobbit-entry-month", monthLabel(entry.date)));
+    dateBlock.appendChild(el("span", "hobbit-entry-weekday", weekdayFor(entry.date)));
+    dateBlock.appendChild(
+      el("span", "hobbit-entry-updated", `更新 ${formatTime(entry.file.stat.mtime)}`)
+    );
+    card.appendChild(dateBlock);
+
+    const content = el("div", "hobbit-entry-content");
+    const titleRow = el("div", "hobbit-entry-title-row");
+    titleRow.appendChild(el("h3", "hobbit-entry-title", entry.title));
+    const favorite = iconButton(
+      entry.favorite ? "取消收藏" : "收藏",
+      "star",
+      entry.favorite ? "is-active" : ""
+    );
+    favorite.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void this.plugin.setFavorite(entry.file, !entry.favorite);
+    });
+    titleRow.appendChild(favorite);
+    content.appendChild(titleRow);
+    content.appendChild(el("p", "hobbit-entry-preview", entry.preview || "这一天还没有文字。"));
+    if (entry.tags.length) {
+      const tags = el("div", "hobbit-entry-tags");
+      for (const tag of entry.tags.slice(0, 4)) tags.appendChild(el("span", "hobbit-tag", `#${tag}`));
+      content.appendChild(tags);
+    }
+    card.appendChild(content);
+
+    const media = el("div", "hobbit-entry-media");
+    if (entry.images.length) {
+      for (const image of entry.images.slice(0, 3)) {
+        const img = document.createElement("img");
+        img.src = this.plugin.app.vault.getResourcePath(image);
+        img.alt = "日记照片";
+        media.appendChild(img);
+      }
+      if (entry.images.length > 3) media.appendChild(el("span", "hobbit-more-images", `+${entry.images.length - 3}`));
+    } else {
+      media.classList.add("is-empty");
+      const icon = el("span", "hobbit-media-placeholder");
+      setIcon(icon, "image");
+      media.appendChild(icon);
+    }
+    card.appendChild(media);
+    return card;
+  }
+}
+
+class HobbitDiaryView extends ItemView {
+  constructor(leaf, plugin) {
+    super(leaf);
+    this.plugin = plugin;
+    this.path = null;
+  }
+
+  getViewType() {
+    return DIARY_VIEW_TYPE;
+  }
+
+  getDisplayText() {
+    return "Hobbit 日记";
+  }
+
+  getIcon() {
+    return "book-open";
+  }
+
+  getState() {
+    return { path: this.path };
+  }
+
+  async setState(state, result) {
+    this.path = state?.path || null;
+    await this.render();
+    if (result) result();
+  }
+
+  async onOpen() {
+    await this.render();
+  }
+
+  async onClose() {
+    this.contentEl.replaceChildren();
+  }
+
+  async refresh() {
+    if (this.path) await this.render();
+  }
+
+  async render() {
+    this.contentEl.replaceChildren();
+    this.contentEl.className = "view-content hobbit-view-content";
+    const file = this.plugin.app.vault.getAbstractFileByPath(this.path || "");
+    if (!(file instanceof TFile)) {
+      this.contentEl.appendChild(el("div", "hobbit-reader-missing", "找不到这篇日记"));
+      return;
+    }
+
+    const raw = await this.plugin.app.vault.cachedRead(file);
+    const frontmatter = parseFrontmatter(raw);
+    const body = stripFrontmatter(raw);
+    const date = normalizeDate(frontmatter.date) || dateFromFilename(file.basename) || localDateKey(new Date(file.stat.mtime));
+    const title = cleanText(frontmatter.title) || extractHeading(body) || formatLongDate(date);
+    const entries = await this.plugin.getDiaryEntries();
+    const index = entries.findIndex((entry) => entry.file.path === file.path);
+    const previous = index >= 0 ? entries[index + 1] : null;
+    const next = index > 0 ? entries[index - 1] : null;
+    const images = this.plugin.resolveImages(raw, file);
+    const favorite = frontmatter.favorite === true || frontmatter.favorite === "true";
+
+    const shell = el("div", "hobbit-reader-shell");
+    this.contentEl.appendChild(shell);
+    const topbar = el("header", "hobbit-reader-topbar");
+    shell.appendChild(topbar);
+    const back = iconButton("返回 Hobbit 主页", "arrow-left");
+    back.addEventListener("click", () => void this.plugin.activateHome());
+    topbar.appendChild(back);
+    topbar.appendChild(el("span", "hobbit-reader-topbar-label", "DAILY ARCHIVE"));
+    const topActions = el("div", "hobbit-reader-top-actions");
+    const editTop = button("编辑", "hobbit-quiet-button", "edit-3");
+    editTop.addEventListener("click", () => void this.plugin.openNativeEditor(file));
+    topActions.appendChild(editTop);
+    topbar.appendChild(topActions);
+
+    const reader = el("article", "hobbit-reader");
+    shell.appendChild(reader);
+    const header = el("header", "hobbit-reader-header");
+    header.appendChild(el("div", "hobbit-eyebrow", "A PAGE FROM YOUR LIFE"));
+    header.appendChild(el("h1", "hobbit-reader-title", title));
+    header.appendChild(el("div", "hobbit-reader-date", `${formatLongDate(date)} ${weekdayFor(date)}`));
+    if (images.length) {
+      header.appendChild(el("div", "hobbit-reader-photo-count", `${images.length} 张照片`));
+    }
+    reader.appendChild(header);
+
+    const actionBar = el("div", "hobbit-reader-actions");
+    const edit = button("进入编辑", "hobbit-primary-button", "edit-3");
+    edit.addEventListener("click", () => void this.plugin.openNativeEditor(file));
+    actionBar.appendChild(edit);
+    const addPhoto = button("添加照片", "hobbit-quiet-button", "image-plus");
+    const photoInput = document.createElement("input");
+    photoInput.type = "file";
+    photoInput.accept = "image/*";
+    photoInput.multiple = true;
+    photoInput.className = "hobbit-hidden-input";
+    photoInput.addEventListener("change", () => {
+      const selectedFiles = Array.from(photoInput.files || []);
+      void (async () => {
+        for (const selected of selectedFiles) {
+          await this.plugin.addPhoto(file, selected);
+        }
+      })();
+      photoInput.value = "";
+    });
+    addPhoto.addEventListener("click", () => photoInput.click());
+    actionBar.append(addPhoto, photoInput);
+    const addTag = button("添加标签", "hobbit-quiet-button", "tag");
+    addTag.addEventListener("click", () => {
+      const value = window.prompt("输入标签，不需要输入 #");
+      if (value) void this.plugin.addTag(file, value);
+    });
+    actionBar.appendChild(addTag);
+    const favoriteButton = button(
+      favorite ? "取消收藏" : "收藏",
+      "hobbit-quiet-button",
+      "star"
+    );
+    favoriteButton.classList.toggle("is-active", favorite);
+    favoriteButton.addEventListener("click", () => {
+      void this.plugin.setFavorite(file, !favorite);
+    });
+    actionBar.appendChild(favoriteButton);
+    reader.appendChild(actionBar);
+
+    if (frontmatter.tags || collectTags(frontmatter, body).length) {
+      const tags = el("div", "hobbit-reader-tags");
+      for (const tag of collectTags(frontmatter, body)) tags.appendChild(el("span", "hobbit-tag", `#${tag}`));
+      reader.appendChild(tags);
+    }
+
+    const articleBody = el("div", "hobbit-reader-body markdown-preview-view");
+    reader.appendChild(articleBody);
+    const renderBody = removeFirstHeading(body);
+    await MarkdownRenderer.renderMarkdown(renderBody, articleBody, file.path, this);
+
+    const navigation = el("nav", "hobbit-reader-navigation");
+    const previousButton = button(
+      previous ? `← ${formatMonthDay(previous.date)}` : "没有更早的日记",
+      "hobbit-nav-day-button",
+      "arrow-left"
+    );
+    previousButton.disabled = !previous;
+    previousButton.addEventListener("click", () => {
+      if (previous) void this.plugin.openDiary(previous.file.path);
+    });
+    const nextButton = button(
+      next ? `${formatMonthDay(next.date)} →` : "没有更新的日记",
+      "hobbit-nav-day-button",
+      "arrow-right"
+    );
+    nextButton.disabled = !next;
+    nextButton.addEventListener("click", () => {
+      if (next) void this.plugin.openDiary(next.file.path);
+    });
+    navigation.append(previousButton, nextButton);
+    reader.appendChild(navigation);
+  }
+}
+
+class HobbitSettingTab extends PluginSettingTab {
+  constructor(app, plugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
+
+  display() {
+    const { containerEl } = this;
+    containerEl.replaceChildren();
+    containerEl.appendChild(el("h2", "hobbit-settings-title", "Hobbit 日记"));
+    containerEl.appendChild(
+      el("p", "hobbit-settings-intro", "Hobbit 使用普通 Markdown 保存每天的日记，并用 diary: true 标识插件日记。")
+    );
+    new Setting(containerEl)
+      .setName("日记文件夹")
+      .setDesc("新建日记的位置；只识别带有 diary: true 的 Markdown 文件。")
+      .addText((text) =>
+        text
+          .setPlaceholder(DEFAULT_SETTINGS.diaryFolder)
+          .setValue(this.plugin.settings.diaryFolder)
+          .onChange(async (value) => {
+            this.plugin.settings.diaryFolder = value.trim() || DEFAULT_SETTINGS.diaryFolder;
+            await this.plugin.saveSettings();
+          })
+      );
+    new Setting(containerEl)
+      .setName("附件文件夹")
+      .setDesc("通过 Hobbit 添加的照片会保存到这里。")
+      .addText((text) =>
+        text
+          .setPlaceholder(DEFAULT_SETTINGS.attachmentFolder)
+          .setValue(this.plugin.settings.attachmentFolder)
+          .onChange(async (value) => {
+            this.plugin.settings.attachmentFolder = value.trim() || DEFAULT_SETTINGS.attachmentFolder;
+            await this.plugin.saveSettings();
+          })
+      );
+  }
+}
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function button(text, className, icon) {
+  const node = document.createElement("button");
+  node.type = "button";
+  node.className = className;
+  if (icon) {
+    const iconEl = el("span", "hobbit-button-icon");
+    setIcon(iconEl, icon);
+    node.appendChild(iconEl);
+  }
+  node.appendChild(document.createTextNode(text));
+  return node;
+}
+
+function iconButton(label, icon, extraClass = "") {
+  const node = document.createElement("button");
+  node.type = "button";
+  node.className = `hobbit-icon-button ${extraClass}`.trim();
+  node.setAttribute("aria-label", label);
+  node.title = label;
+  setIcon(node, icon);
+  return node;
+}
+
+function navButton(text, icon) {
+  const node = document.createElement("button");
+  node.type = "button";
+  node.className = "hobbit-nav-button";
+  const iconEl = el("span", "hobbit-nav-icon");
+  setIcon(iconEl, icon);
+  node.append(iconEl, el("span", "hobbit-nav-text", text));
+  return node;
+}
+
+function parseFrontmatter(raw) {
+  const match = raw.match(/^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/);
+  if (!match) return {};
+  const result = {};
+  for (const line of match[1].split(/\r?\n/)) {
+    const separator = line.indexOf(":");
+    if (separator < 0) continue;
+    const key = line.slice(0, separator).trim();
+    const value = line.slice(separator + 1).trim();
+    if (!key) continue;
+    result[key] = parseYamlValue(value);
+  }
+  return result;
+}
+
+function parseYamlValue(value) {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  if (value === "null") return null;
+  if (value.startsWith("[") && value.endsWith("]")) {
+    const inner = value.slice(1, -1).trim();
+    if (!inner) return [];
+    return inner
+      .split(",")
+      .map((item) => item.trim().replace(/^['\"]|['\"]$/g, ""))
+      .filter(Boolean);
+  }
+  return value.replace(/^['\"]|['\"]$/g, "");
+}
+
+function stripFrontmatter(raw) {
+  return raw.replace(/^---\s*\r?\n[\s\S]*?\r?\n---\s*(?:\r?\n|$)/, "");
+}
+
+function removeFirstHeading(body) {
+  return body.replace(/^\s*#\s+[^\r\n]+\r?\n?/, "");
+}
+
+function isDiary(frontmatter) {
+  return frontmatter.diary === true || frontmatter.diary === "true";
+}
+
+function extractHeading(body) {
+  const match = body.match(/^\s*#\s+(.+)$/m);
+  return match ? cleanText(match[1]) : "";
+}
+
+function isGeneratedDiaryHeading(body, date) {
+  const heading = extractHeading(body);
+  if (!heading || !date) return false;
+  return [
+    `${formatLongDate(date)} ${weekdayFor(date)}`,
+    formatLongDate(date),
+    date,
+  ].includes(heading);
+}
+
+function countWords(body) {
+  const value = body
+    .replace(/!\[\[[^\]]+\]\]/g, " ")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/[`*_~>#-]/g, " ")
+    .trim();
+  if (!value) return 0;
+  const cjk = value.match(/[\u3400-\u9fff]/g)?.length || 0;
+  const latin = value
+    .replace(/[\u3400-\u9fff]/g, " ")
+    .match(/[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*/g)?.length || 0;
+  return cjk + latin;
+}
+
+function makePreview(body, title) {
+  let value = body
+    .replace(/^\s*#\s+[^\r\n]+\r?\n?/, "")
+    .replace(/!\[\[[^\]]+\]\]/g, "")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/^\s*[-*>#`]+\s*/gm, "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/[*_~]/g, "")
+    .replace(/#[^\s#]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (value === title) value = "";
+  return value.slice(0, 180) + (value.length > 180 ? "…" : "");
+}
+
+function collectTags(frontmatter, body) {
+  const result = normalizeTags(frontmatter.tags);
+  const inline = body.match(/(^|\s)#([^\s#]+)/gm) || [];
+  for (const item of inline) {
+    const tag = item.trim().replace(/^#/, "");
+    if (tag && !result.includes(tag)) result.push(tag);
+  }
+  return result;
+}
+
+function normalizeTags(value) {
+  if (Array.isArray(value)) return value.map(String).map((tag) => tag.replace(/^#/, "")).filter(Boolean);
+  if (typeof value === "string") return value.split(/[ ,]+/).map((tag) => tag.replace(/^#/, "")).filter(Boolean);
+  return [];
+}
+
+function cleanText(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeDate(value) {
+  if (typeof value !== "string") return "";
+  const match = value.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (!match) return "";
+  return `${match[1]}-${String(match[2]).padStart(2, "0")}-${String(match[3]).padStart(2, "0")}`;
+}
+
+function dateFromFilename(name) {
+  const match = name.match(/(\d{4})[-_.](\d{1,2})[-_.](\d{1,2})/);
+  if (!match) return "";
+  return `${match[1]}-${String(match[2]).padStart(2, "0")}-${String(match[3]).padStart(2, "0")}`;
+}
+
+function localDateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function formatLongDate(dateKey) {
+  const date = new Date(`${dateKey}T12:00:00`);
+  return date.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
+}
+
+function formatMonthDay(dateKey) {
+  const date = new Date(`${dateKey}T12:00:00`);
+  return date.toLocaleDateString("zh-CN", { month: "short", day: "numeric" });
+}
+
+function weekdayFor(dateKey) {
+  const date = new Date(`${dateKey}T12:00:00`);
+  return date.toLocaleDateString("zh-CN", { weekday: "long" });
+}
+
+function dayNumber(dateKey) {
+  return String(Number(dateKey.slice(8, 10)));
+}
+
+function monthLabel(dateKey) {
+  return `${dateKey.slice(0, 4)} / ${dateKey.slice(5, 7)}`;
+}
+
+function formatTime(timestamp) {
+  return new Date(timestamp).toLocaleTimeString("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function extensionFromName(name) {
+  const match = name.match(/\.([^.]+)$/);
+  return match ? match[1].toLowerCase() : "";
+}
+
+function sanitizeFilename(value) {
+  return value.replace(/[\\/:*?\"<>|]/g, "-").replace(/\s+/g, "-").slice(0, 80);
+}
+
+module.exports = HobbitPlugin;
