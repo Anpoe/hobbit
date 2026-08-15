@@ -1546,9 +1546,7 @@
 @media (max-width: 700px) {
   body.is-mobile.hobbit-mobile-fullscreen .workspace-tab-header-container,
   body.is-mobile.hobbit-mobile-fullscreen .workspace-leaf-header,
-  body.is-mobile.hobbit-mobile-fullscreen .view-header,
-  body.is-mobile.hobbit-mobile-fullscreen .mobile-navbar,
-  body.is-mobile.hobbit-mobile-fullscreen .mobile-toolbar {
+  body.is-mobile.hobbit-mobile-fullscreen .view-header {
     display: none !important;
   }
 
