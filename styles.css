@@ -1588,6 +1588,57 @@
   .hobbit-editor-info-panel {
     transform: translateY(15px);
   }
+
+  /* Keep the editor chrome airy on narrow phones: no tiles, just larger icons. */
+  .hobbit-editor-companion {
+    background: transparent !important;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .hobbit-editor-companion-actions {
+    justify-content: center;
+    gap: 3px;
+    padding-bottom: 0;
+  }
+
+  .hobbit-editor-icon-button,
+  .hobbit-editor-action-button {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    min-height: 40px;
+    padding: 0;
+    border: 0 !important;
+    border-radius: 50%;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .hobbit-editor-action-button {
+    font-size: 0;
+  }
+
+  .hobbit-editor-icon-button svg,
+  .hobbit-editor-action-button .hobbit-button-icon svg {
+    width: 22px;
+    height: 22px;
+    stroke-width: 1.45;
+  }
+
+  .hobbit-editor-icon-button:hover,
+  .hobbit-editor-icon-button:focus-visible,
+  .hobbit-editor-action-button:hover,
+  .hobbit-editor-action-button:focus-visible,
+  .hobbit-editor-action-button.is-active {
+    background: transparent !important;
+    color: var(--hobbit-accent);
+  }
+
+  .hobbit-diary-editor .cm-content,
+  .hobbit-diary-editor .markdown-preview-sizer {
+    padding-top: 22px;
+  }
 }
 
 /* On Obsidian mobile, let Hobbit own the whole viewport while it is active. */
