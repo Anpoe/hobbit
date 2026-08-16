@@ -2571,3 +2571,181 @@ body.hobbit-mobile-fullscreen .mobile-navbar {
   height: 22px !important;
   stroke-width: 1.35 !important;
 }
+
+/* Image presentation: keep thumbnails calm and let reader images breathe. */
+.hobbit-entry-media {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 4px;
+  gap: 6px;
+  border: 1px solid var(--hobbit-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--hobbit-paper) 88%, var(--hobbit-paper-deep) 12%);
+}
+
+.hobbit-entry-image-button {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  place-self: stretch;
+  box-sizing: border-box;
+  border: 0 !important;
+  border-radius: 8px;
+  background: transparent !important;
+}
+
+.hobbit-entry-image-button img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--hobbit-paper-deep);
+}
+
+.hobbit-entry-image-button.is-broken,
+.hobbit-reader-body .hobbit-inline-image.is-broken,
+.hobbit-reader-body .internal-embed.is-broken {
+  display: none !important;
+}
+
+.hobbit-reader-body .internal-embed.media-embed {
+  display: block;
+  width: 100%;
+  margin: 1.45em auto;
+}
+
+.hobbit-reader-body img.hobbit-inline-image,
+.hobbit-reader-body > img {
+  display: block;
+  width: min(100%, 640px);
+  max-width: 100%;
+  max-height: 680px;
+  height: auto;
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 6px;
+  border: 1px solid var(--hobbit-line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--hobbit-paper) 84%, var(--hobbit-paper-deep) 16%);
+  box-shadow: 0 12px 30px rgba(82, 56, 39, 0.08);
+  cursor: zoom-in;
+  object-fit: contain;
+}
+
+.hobbit-reader-body p:has(> img.hobbit-inline-image),
+.hobbit-reader-body p:has(> .internal-embed.media-embed) {
+  margin: 1.45em 0;
+}
+
+.hobbit-reader-body .hobbit-inline-image:focus-visible {
+  outline: 2px solid var(--hobbit-accent);
+  outline-offset: 3px;
+}
+
+@media (max-width: 700px) {
+  .hobbit-entry-media {
+    width: 82px;
+    height: 74px;
+  }
+
+  .hobbit-reader-body img.hobbit-inline-image,
+  .hobbit-reader-body > img {
+    width: 100%;
+    max-height: 520px;
+    padding: 4px;
+    border-radius: 12px;
+  }
+}
+
+@media (max-width: 420px) {
+  .hobbit-entry-media {
+    width: 74px;
+    height: 68px;
+  }
+}
+
+/* Let the thumbnail composition follow the number of photos instead of a fixed 2x2 box. */
+.hobbit-entry-media {
+  align-self: center;
+  justify-self: stretch;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+
+.hobbit-entry-media.is-count-1 {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  aspect-ratio: 4 / 3;
+}
+
+.hobbit-entry-media.is-count-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: 1fr;
+  aspect-ratio: 4 / 3;
+}
+
+.hobbit-entry-media.is-count-3 {
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  aspect-ratio: 4 / 3;
+}
+
+.hobbit-entry-media.is-count-3 .hobbit-entry-image-button:first-child {
+  grid-column: 1;
+  grid-row: 1 / -1;
+}
+
+.hobbit-entry-media.is-count-3 .hobbit-entry-image-button:nth-child(2) {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.hobbit-entry-media.is-count-3 .hobbit-entry-image-button:nth-child(3) {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.hobbit-entry-media.is-count-4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  aspect-ratio: 1 / 1;
+}
+
+.hobbit-entry-media .hobbit-entry-image-button {
+  min-height: 0;
+  place-self: stretch;
+}
+
+.hobbit-entry-media .hobbit-more-images {
+  right: 8px;
+  bottom: 8px;
+  border: 1px solid color-mix(in srgb, var(--hobbit-paper) 72%, transparent 28%);
+  background: color-mix(in srgb, var(--hobbit-accent) 84%, var(--hobbit-paper) 16%);
+  color: var(--hobbit-paper);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+@media (max-width: 700px) {
+  .hobbit-entry-media {
+    width: 100%;
+    height: auto;
+    align-self: start;
+  }
+}
+
+@media (max-width: 420px) {
+  .hobbit-entry-media {
+    width: 100%;
+    height: auto;
+  }
+}

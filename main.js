@@ -139,24 +139,27 @@ class HobbitPlugin extends Plugin {
 
     // Hobbit's edit entry is explicit: always leave the note in Obsidian's
     // source editor, even when the note was previously opened in reading mode.
-    const view = leaf.view;
-    if (view?.getViewType?.() === "markdown" && typeof view.setMode === "function") {
-      view.setMode("source");
-      view.editor?.focus?.();
+    // Use the leaf state API so Obsidian resolves its own Markdown mode object.
+    const viewState = leaf.getViewState?.();
+    if (viewState?.type === "markdown") {
+      viewState.state = { ...viewState.state, mode: "source" };
+      await leaf.setViewState(viewState, { focus: true });
+      leaf.view?.editor?.focus?.();
     }
 
     this.scheduleEditorChromeRefresh();
   }
 
   async openImage(image) {
-    if (!(image instanceof TFile)) return;
+    const source = getImageSource(image, this.app);
+    if (!source) return;
     const modal = new Modal(this.app);
     modal.setTitle("照片");
     modal.modalEl.classList.add("hobbit-image-modal");
     modal.onOpen = () => {
       const imageEl = document.createElement("img");
       imageEl.className = "hobbit-image-modal-image";
-      imageEl.src = this.app.vault.getResourcePath(image);
+      imageEl.src = source;
       imageEl.alt = "日记照片";
       imageEl.decoding = "async";
       modal.contentEl.appendChild(imageEl);
@@ -274,7 +277,7 @@ class HobbitPlugin extends Plugin {
         cleanText(frontmatter.title) ||
         extractHeading(body) ||
         formatLongDate(date);
-      const imageFiles = this.resolveImages(raw, file);
+      const images = this.resolveImages(raw, file);
       entries.push({
         file,
         raw,
@@ -285,7 +288,7 @@ class HobbitPlugin extends Plugin {
         preview: makePreview(body, title),
         tags: collectTags(frontmatter, body),
         favorite: frontmatter.favorite === true || frontmatter.favorite === "true",
-        images: imageFiles,
+        images,
       });
     }
 
@@ -299,16 +302,24 @@ class HobbitPlugin extends Plugin {
 
   resolveImages(raw, sourceFile) {
     const links = [];
-    const embedPattern = /!\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/g;
-    const markdownPattern = /!\[[^\]]*\]\(([^)]+)\)/g;
+    const imagePattern = /!\[\[([^\]|]+)(?:\|[^\]]*)?\]\]|!\[[^\]]*\]\((<[^>]+>|[^)\s]+)(?:\s+["'][^)]*["'])?\)/g;
     let match;
-    while ((match = embedPattern.exec(raw))) links.push(match[1].trim());
-    while ((match = markdownPattern.exec(raw))) links.push(match[1].trim());
+    while ((match = imagePattern.exec(raw))) {
+      links.push((match[1] || match[2] || "").trim());
+    }
 
     const result = [];
     const seen = new Set();
-    for (const link of links) {
-      if (/^(https?:|data:)/i.test(link)) continue;
+    for (const rawLink of links) {
+      const link = cleanImageTarget(rawLink);
+      if (!link) continue;
+      if (/^(https?:|data:)/i.test(link)) {
+        const key = `remote:${link}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        result.push(link);
+        continue;
+      }
       const destination = this.app.metadataCache.getFirstLinkpathDest(
         link,
         sourceFile.path
@@ -316,8 +327,9 @@ class HobbitPlugin extends Plugin {
       if (!destination || !IMAGE_EXTENSIONS.has(destination.extension.toLowerCase())) {
         continue;
       }
-      if (seen.has(destination.path)) continue;
-      seen.add(destination.path);
+      const key = `vault:${destination.path}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
       result.push(destination);
     }
     return result;
@@ -1025,7 +1037,7 @@ class HobbitHomeView extends ItemView {
           entry.preview,
           entry.date,
           ...entry.tags,
-          ...entry.images.flatMap((image) => [image.basename, image.path]),
+          ...entry.images.flatMap((image) => getImageSearchTerms(image)),
         ]
           .join(" ")
           .toLowerCase();
@@ -1123,16 +1135,19 @@ class HobbitHomeView extends ItemView {
     card.appendChild(content);
 
     if (entry.images.length) {
+      const visibleImages = entry.images.slice(0, 4);
       const media = el("div", "hobbit-entry-media");
+      media.classList.add(`is-count-${visibleImages.length}`);
+      media.dataset.imageCount = String(visibleImages.length);
       appendImageGallery(
         media,
-        entry.images.slice(0, 3),
+        visibleImages,
         this.plugin,
         entry.file.path,
         "hobbit-entry-image-button"
       );
-      if (entry.images.length > 3) {
-        media.appendChild(el("span", "hobbit-more-images", `+${entry.images.length - 3}`));
+      if (entry.images.length > 4) {
+        media.appendChild(el("span", "hobbit-more-images", `+${entry.images.length - 4}`));
       }
       card.appendChild(media);
     }
@@ -1271,16 +1286,9 @@ class HobbitDiaryView extends ItemView {
 
     const articleBody = el("div", "hobbit-reader-body markdown-preview-view");
     reader.appendChild(articleBody);
-    const renderBody = removeInlineTags(
-      removeImageEmbeds(removeFirstHeading(body))
-    );
+    const renderBody = prepareReaderBody(body, this.plugin, file);
     await MarkdownRenderer.renderMarkdown(renderBody, articleBody, file.path, this);
-
-    if (images.length) {
-      const gallery = el("div", "hobbit-reader-gallery");
-      appendImageGallery(gallery, images, this.plugin, file.path, "hobbit-reader-image-button");
-      reader.appendChild(gallery);
-    }
+    attachRenderedImageInteractions(articleBody, this.plugin);
 
     const navigation = el("nav", "hobbit-reader-navigation");
     const previousButton = button(
@@ -1426,14 +1434,6 @@ function removeFirstHeading(body) {
   return body.replace(/^\s*#\s+[^\r\n]+\r?\n?/, "");
 }
 
-function removeImageEmbeds(body) {
-  return body
-    .replace(/^\s*!\[\[[^\]]+\]\]\s*$/gm, "")
-    .replace(/^\s*!\[[^\]]*\]\([^)]*\)\s*$/gm, "")
-    .replace(/!\[\[[^\]]+\]\]/g, "")
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, "");
-}
-
 function removeInlineTags(body) {
   return body
     .replace(/^\s*(?:#[^\s#，。！？、；：]+\s*)+$/gm, "")
@@ -1442,8 +1442,85 @@ function removeInlineTags(body) {
     .replace(/\n{3,}/g, "\n\n");
 }
 
+function prepareReaderBody(body, plugin, sourceFile) {
+  // Navigation links and task markers are editing metadata, not diary prose.
+  const withoutEditingMetadata = body
+    .replace(/^\s*[-*+]\s*\[[^\]]*\]\s*\[\[[^\]]+\]\]\s*$/gm, "")
+    .replace(/^\s*[-*+]\s*\[[^\]]*\]\s+/gm, "");
+  const cleaned = removeInlineTags(removeFirstHeading(withoutEditingMetadata));
+  return normalizeReaderImageEmbeds(cleaned, plugin, sourceFile);
+}
+
+function normalizeReaderImageEmbeds(body, plugin, sourceFile) {
+  return body.replace(/!\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/g, (whole, rawTarget) => {
+    const target = cleanImageTarget(rawTarget);
+    if (!target) return "";
+    if (/^(https?:|data:)/i.test(target)) {
+      return `![日记照片](${target})`;
+    }
+    const destination = plugin.app.metadataCache.getFirstLinkpathDest(
+      target,
+      sourceFile.path
+    );
+    if (!(destination instanceof TFile) || !IMAGE_EXTENSIONS.has(destination.extension.toLowerCase())) {
+      return "";
+    }
+    const source = plugin.app.vault.getResourcePath(destination);
+    return `![日记照片](${source})`;
+  });
+}
+
+function cleanImageTarget(value) {
+  let target = String(value || "").trim();
+  if (target.startsWith("<") && target.endsWith(">")) {
+    target = target.slice(1, -1).trim();
+  }
+  const titled = target.match(/^(\S+)\s+(?:["'][^]*["']|\([^)]*\))$/);
+  return (titled ? titled[1] : target).trim();
+}
+
+function getImageSource(image, app) {
+  if (image instanceof TFile) return app.vault.getResourcePath(image);
+  if (typeof image === "string") return image;
+  if (image && typeof image.src === "string") return image.src;
+  if (image?.file instanceof TFile) return app.vault.getResourcePath(image.file);
+  return "";
+}
+
+function getImageSearchTerms(image) {
+  if (image instanceof TFile) return [image.basename, image.path];
+  if (typeof image === "string") return [image];
+  return [image?.name || "", image?.path || "", image?.src || ""];
+}
+
+function attachRenderedImageInteractions(container, plugin) {
+  for (const image of Array.from(container.querySelectorAll("img"))) {
+    image.alt = "日记照片";
+    image.loading = "lazy";
+    image.decoding = "async";
+    image.tabIndex = 0;
+    image.classList.add("hobbit-inline-image");
+    image.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void plugin.openImage(image.currentSrc || image.src);
+    });
+    image.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      void plugin.openImage(image.currentSrc || image.src);
+    });
+    image.addEventListener("error", () => {
+      image.classList.add("is-broken");
+      image.closest(".internal-embed, .image-embed")?.classList.add("is-broken");
+    });
+  }
+}
+
 function appendImageGallery(container, images, plugin, sourcePath, buttonClass) {
   images.forEach((image, index) => {
+    const source = getImageSource(image, plugin.app);
+    if (!source) return;
     const imageButton = document.createElement("button");
     imageButton.type = "button";
     imageButton.className = buttonClass;
@@ -1457,12 +1534,29 @@ function appendImageGallery(container, images, plugin, sourcePath, buttonClass) 
       void plugin.openImage(image, sourcePath);
     });
     const img = document.createElement("img");
-    img.src = plugin.app.vault.getResourcePath(image);
+    img.src = source;
     img.alt = "日记照片";
     img.loading = "lazy";
+    img.decoding = "async";
+    img.addEventListener("error", () => {
+      imageButton.remove();
+      syncEntryMediaCount(container);
+      if (!container.querySelector("img")) {
+        container.closest(".hobbit-entry-card")?.classList.remove("has-media");
+        container.remove();
+      }
+    });
     imageButton.appendChild(img);
     container.appendChild(imageButton);
   });
+}
+
+function syncEntryMediaCount(container) {
+  const count = Math.min(4, container.querySelectorAll(".hobbit-entry-image-button").length);
+  for (let index = 1; index <= 4; index += 1) {
+    container.classList.toggle(`is-count-${index}`, count === index);
+  }
+  container.dataset.imageCount = String(count);
 }
 
 function extractHeading(body) {
@@ -1525,6 +1619,7 @@ function makePreview(body, title) {
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
     .replace(/(^|[\s\u3000，。！？、；：])#[^\s#，。！？、；：]+/g, "$1")
+    .replace(/<[^>]+>/g, " ")
     .replace(/[*_~]/g, "")
     .replace(/\s+/g, " ")
     .trim();
