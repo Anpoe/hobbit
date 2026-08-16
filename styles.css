@@ -2812,3 +2812,105 @@ body.hobbit-mobile-fullscreen .mobile-navbar {
     height: auto;
   }
 }
+
+/* Final phone viewport behavior.
+   Hobbit keeps Obsidian's native editor and native keyboard toolbar, while
+   removing the floating app navigation that previously covered content. */
+@media (max-width: 700px) {
+  html:has(body.is-mobile.hobbit-mobile-fullscreen),
+  html body.is-mobile.hobbit-mobile-fullscreen,
+  html body.is-mobile.hobbit-mobile-fullscreen .app-container,
+  html body.is-mobile.hobbit-mobile-fullscreen .workspace,
+  html body.is-mobile.hobbit-mobile-fullscreen .horizontal-main-container,
+  html body.is-mobile.hobbit-mobile-fullscreen .workspace-split.mod-root,
+  html body.is-mobile.hobbit-mobile-fullscreen .workspace-tabs,
+  html body.is-mobile.hobbit-mobile-fullscreen .workspace-tab-container,
+  html body.is-mobile.hobbit-mobile-fullscreen .workspace-leaf,
+  html body.is-mobile.hobbit-mobile-fullscreen .workspace-leaf-content,
+  html body.is-mobile.hobbit-mobile-fullscreen .view-content,
+  html body.is-mobile.hobbit-mobile-fullscreen .hobbit-view-content,
+  html body.is-mobile.hobbit-mobile-fullscreen .hobbit-shell,
+  html body.is-mobile.hobbit-mobile-fullscreen .hobbit-reader-shell {
+    --hobbit-bottom-nav-space: 0px;
+    --background-primary: var(--hobbit-mobile-paper) !important;
+    --background-primary-alt: var(--hobbit-mobile-paper) !important;
+    --background-secondary: var(--hobbit-mobile-paper) !important;
+    --background-secondary-alt: var(--hobbit-mobile-paper) !important;
+    --mobile-sidebar-background: var(--hobbit-mobile-paper) !important;
+    background: var(--hobbit-mobile-paper) !important;
+    background-color: var(--hobbit-mobile-paper) !important;
+    background-image: none !important;
+  }
+
+  body.is-mobile.hobbit-native-fullscreen .mobile-navbar {
+    display: none !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-view-content {
+    min-height: 100% !important;
+    padding-bottom: var(--hobbit-safe-bottom) !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-main {
+    min-height: 100% !important;
+    padding-bottom: calc(24px + var(--hobbit-safe-bottom)) !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-entry-list {
+    padding-bottom: calc(18px + var(--hobbit-safe-bottom)) !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-reader {
+    min-height: 100% !important;
+    padding-bottom: calc(28px + var(--hobbit-safe-bottom)) !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor {
+    box-sizing: border-box !important;
+    min-height: 0 !important;
+    height: 100% !important;
+    padding-bottom: 0 !important;
+    overflow: hidden !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor > .markdown-source-view {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    height: auto !important;
+    overflow: hidden !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor .cm-editor {
+    min-width: 0 !important;
+    min-height: 0 !important;
+    height: 100% !important;
+    overflow: hidden !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor .cm-scroller {
+    min-width: 0 !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor .cm-content {
+    box-sizing: border-box !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-bottom: calc(56px + var(--hobbit-safe-bottom)) !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor .cm-line {
+    max-width: 100% !important;
+    white-space: pre-wrap !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+  }
+}

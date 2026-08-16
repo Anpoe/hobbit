@@ -503,37 +503,20 @@ class HobbitPlugin extends Plugin {
     }
 
     if (shouldEnter) {
-      if (this.hobbitNativeFullscreenOwned) {
-        body.classList.remove("is-hidden-nav");
-        return;
-      }
+      if (this.hobbitNativeFullscreenOwned) return;
       if (typeof mobileNavbar?.hideNavigation !== "function") return;
 
-      // Reuse Obsidian's own native status-bar transition, then immediately
-      // restore its navigation class so the bottom navigation stays visible.
+      // Reuse Obsidian's native full-screen transition. Keeping its hidden-nav
+      // state removes the floating bottom obstruction and lets the Hobbit
+      // background extend behind the mobile status-bar area.
       try {
         mobileNavbar.hideNavigation();
       } catch (error) {
         console.warn("Hobbit 无法启用移动端沉浸模式", error);
         return;
       }
-      body.classList.remove("is-hidden-nav");
       this.hobbitNativeFullscreenOwned = true;
       body.classList.add("hobbit-native-fullscreen");
-
-      // Obsidian's native helper can restore is-hidden-nav on the next frame.
-      // Hobbit keeps the native full-screen transition, but its own bottom
-      // navigation must remain reachable while the diary is open.
-      const keepNavigationVisible = () => {
-        if (
-          this.hobbitNativeFullscreenOwned &&
-          body.classList.contains("hobbit-native-fullscreen")
-        ) {
-          body.classList.remove("is-hidden-nav");
-        }
-      };
-      window.setTimeout(keepNavigationVisible, 0);
-      window.setTimeout(keepNavigationVisible, 120);
       return;
     }
   }
