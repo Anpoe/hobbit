@@ -430,14 +430,6 @@ class HobbitPlugin extends Plugin {
     const contentEl = view?.contentEl;
     if (!contentEl || view?.getViewType?.() !== "markdown") return;
 
-    // On phones the native Obsidian editor is the editing surface.  Do not
-    // wrap it in Hobbit's companion toolbar or fullscreen styling: the
-    // native view owns text scrolling, keyboard resizing, and touch input.
-    if (document.body?.classList.contains("is-mobile")) {
-      this.removeEditorChrome(view);
-      return;
-    }
-
     const file = view.file;
     if (!(file instanceof TFile) || file.extension !== "md") {
       this.removeEditorChrome(view);
@@ -479,8 +471,13 @@ class HobbitPlugin extends Plugin {
   updateMobileFullscreen(leaf = this.app.workspace.activeLeaf) {
     const view = leaf?.view;
     const viewType = view?.getViewType?.();
+    const file = view?.file;
+    const isDiaryMarkdown =
+      viewType === "markdown" &&
+      file instanceof TFile &&
+      this.getDailyNoteDate(file);
     const isHobbitView =
-      viewType === HOME_VIEW_TYPE || viewType === DIARY_VIEW_TYPE;
+      viewType === HOME_VIEW_TYPE || viewType === DIARY_VIEW_TYPE || isDiaryMarkdown;
     document.body?.classList.toggle("hobbit-mobile-fullscreen", isHobbitView);
     this.updateNativeMobileFullscreen(isHobbitView);
   }
