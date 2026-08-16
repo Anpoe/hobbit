@@ -105,13 +105,42 @@ class HobbitPlugin extends Plugin {
   }
 
   async activateHome() {
-    const existing = this.app.workspace
-      .getLeavesOfType(HOME_VIEW_TYPE)
-      .at(0);
-    const leaf = existing ?? this.app.workspace.getLeaf("tab");
+    const leaf = this.getHobbitLeaf();
     await leaf.setViewState({ type: HOME_VIEW_TYPE, active: true });
     this.app.workspace.revealLeaf(leaf);
     this.updateMobileFullscreen(leaf);
+  }
+
+  isHobbitLeaf(leaf) {
+    const view = leaf?.view;
+    const viewType = view?.getViewType?.();
+    if (viewType === HOME_VIEW_TYPE || viewType === DIARY_VIEW_TYPE) {
+      return true;
+    }
+
+    return (
+      viewType === "markdown" &&
+      view.file instanceof TFile &&
+      Boolean(this.getDailyNoteDate(view.file))
+    );
+  }
+
+  getHobbitLeaf() {
+    const activeLeaf = this.app.workspace.activeLeaf;
+    if (this.isHobbitLeaf(activeLeaf)) return activeLeaf;
+
+    const existingCustomLeaf = [
+      ...this.app.workspace.getLeavesOfType(HOME_VIEW_TYPE),
+      ...this.app.workspace.getLeavesOfType(DIARY_VIEW_TYPE),
+    ].at(0);
+    if (existingCustomLeaf) return existingCustomLeaf;
+
+    const existingDiaryLeaf = this.app.workspace
+      .getLeavesOfType("markdown")
+      .find((leaf) => this.isHobbitLeaf(leaf));
+    if (existingDiaryLeaf) return existingDiaryLeaf;
+
+    return activeLeaf ?? this.app.workspace.getLeaf(false);
   }
 
   async openDiary(path) {
@@ -121,10 +150,7 @@ class HobbitPlugin extends Plugin {
       return;
     }
 
-    const existing = this.app.workspace
-      .getLeavesOfType(DIARY_VIEW_TYPE)
-      .at(0);
-    const leaf = existing ?? this.app.workspace.getLeaf("tab");
+    const leaf = this.getHobbitLeaf();
     await leaf.setViewState({
       type: DIARY_VIEW_TYPE,
       state: { path: file.path },
@@ -136,7 +162,7 @@ class HobbitPlugin extends Plugin {
 
   async openNativeEditor(file) {
     if (!(file instanceof TFile)) return;
-    const leaf = this.app.workspace.getLeaf("tab");
+    const leaf = this.getHobbitLeaf();
     await leaf.openFile(file, { active: true });
 
     // Hobbit's edit entry is explicit: always leave the note in Obsidian's
@@ -150,6 +176,7 @@ class HobbitPlugin extends Plugin {
     }
 
     this.scheduleEditorChromeRefresh();
+    this.updateMobileFullscreen(leaf);
   }
 
   async openImage(image) {
@@ -503,12 +530,14 @@ class HobbitPlugin extends Plugin {
     }
 
     if (shouldEnter) {
-      if (this.hobbitNativeFullscreenOwned) return;
+      if (this.hobbitNativeFullscreenOwned) {
+        body.classList.remove("is-hidden-nav");
+        return;
+      }
       if (typeof mobileNavbar?.hideNavigation !== "function") return;
 
-      // Reuse Obsidian's native full-screen transition. Keeping its hidden-nav
-      // state removes the floating bottom obstruction and lets the Hobbit
-      // background extend behind the mobile status-bar area.
+      // Reuse Obsidian's native full-screen transition for the warm edge-to-edge
+      // background, then keep the native floating navigation visible.
       try {
         mobileNavbar.hideNavigation();
       } catch (error) {
@@ -517,6 +546,18 @@ class HobbitPlugin extends Plugin {
       }
       this.hobbitNativeFullscreenOwned = true;
       body.classList.add("hobbit-native-fullscreen");
+      body.classList.remove("is-hidden-nav");
+
+      const keepNavigationVisible = () => {
+        if (
+          this.hobbitNativeFullscreenOwned &&
+          body.classList.contains("hobbit-native-fullscreen")
+        ) {
+          body.classList.remove("is-hidden-nav");
+        }
+      };
+      window.setTimeout(keepNavigationVisible, 0);
+      window.setTimeout(keepNavigationVisible, 120);
       return;
     }
   }
