@@ -109,6 +109,10 @@
   font-size: 13px;
 }
 
+.hobbit-search::-webkit-search-cancel-button {
+  display: none;
+}
+
 .hobbit-icon-button,
 .hobbit-nav-day-button {
   appearance: none;
@@ -1058,6 +1062,9 @@
 }
 
 .hobbit-reader-body {
+  width: min(100%, 680px);
+  margin-inline: auto;
+  box-sizing: border-box;
   padding: 34px 0;
   color: var(--hobbit-ink);
   font-size: 16px;
@@ -1597,8 +1604,8 @@
   }
 
   .hobbit-editor-companion-actions {
-    justify-content: center;
-    gap: 3px;
+    justify-content: space-between;
+    gap: 0;
     padding-bottom: 0;
   }
 
@@ -1690,5 +1697,799 @@
     width: 32px;
     height: 32px;
     border-radius: 8px;
+  }
+}
+
+/* Hobbit mobile polish: keep Obsidian's bottom navigation visible without
+   letting it cover the last piece of diary content. */
+html:has(body.is-mobile.hobbit-mobile-fullscreen) {
+  --background-secondary-alt: #f7f2ea !important;
+  background: #f7f2ea !important;
+  background-color: #f7f2ea !important;
+}
+
+html:has(body.is-mobile.theme-dark.hobbit-mobile-fullscreen) {
+  --background-secondary-alt: #231f1b !important;
+  background: #231f1b !important;
+  background-color: #231f1b !important;
+}
+
+.hobbit-view-content,
+.hobbit-diary-editor {
+  --hobbit-bottom-nav-space: 96px;
+  --hobbit-safe-top: max(35px, env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px));
+  --hobbit-safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px));
+}
+
+html body.is-mobile.hobbit-mobile-fullscreen {
+  --hobbit-mobile-paper: #f7f2ea;
+  --background-secondary-alt: var(--hobbit-mobile-paper) !important;
+  background: var(--hobbit-mobile-paper) !important;
+  background-color: var(--hobbit-mobile-paper) !important;
+  background-image: none !important;
+}
+
+body.is-mobile.hobbit-mobile-fullscreen .hobbit-view-content,
+body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor {
+  background: var(--hobbit-mobile-paper, var(--hobbit-paper)) !important;
+  background-color: var(--hobbit-mobile-paper, var(--hobbit-paper)) !important;
+}
+
+html body.is-mobile.theme-dark.hobbit-mobile-fullscreen {
+  --hobbit-mobile-paper: #231f1b;
+  --background-secondary-alt: var(--hobbit-mobile-paper) !important;
+}
+
+body.hobbit-mobile-fullscreen .app-container,
+body.hobbit-mobile-fullscreen .workspace,
+body.hobbit-mobile-fullscreen .horizontal-main-container {
+  background: var(--hobbit-mobile-paper) !important;
+}
+
+body.hobbit-mobile-fullscreen .mobile-navbar {
+  background: color-mix(in srgb, var(--hobbit-mobile-paper) 93%, white 7%) !important;
+}
+
+.hobbit-search-toggle {
+  display: none;
+}
+
+.hobbit-search-wrap {
+  background: color-mix(in srgb, var(--hobbit-paper) 88%, white 12%);
+}
+
+.hobbit-search-clear {
+  display: none;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  color: var(--hobbit-muted);
+}
+
+.hobbit-search-wrap.has-value .hobbit-search-clear {
+  display: inline-flex;
+}
+
+.hobbit-entry-card {
+  box-shadow: none;
+}
+
+.hobbit-shell .hobbit-icon-button svg,
+.hobbit-reader-shell .hobbit-icon-button svg,
+.hobbit-editor-icon-button svg,
+.hobbit-editor-action-button svg,
+.hobbit-editor-detail-button svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.45;
+}
+
+.hobbit-calendar-toggle {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 auto 7px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent !important;
+  color: var(--hobbit-muted) !important;
+  font-size: 10px;
+  cursor: pointer;
+  box-shadow: none !important;
+}
+
+.hobbit-calendar-toggle:hover,
+.hobbit-calendar-toggle:focus-visible {
+  background: transparent !important;
+  color: var(--hobbit-accent) !important;
+}
+
+.hobbit-calendar-toggle svg {
+  width: 13px;
+  height: 13px;
+}
+
+.hobbit-entry-card:not(.has-media) {
+  grid-template-columns: 98px minmax(0, 1fr);
+}
+
+.hobbit-entry-card.has-media {
+  grid-template-columns: 98px minmax(0, 1fr) 150px;
+}
+
+.hobbit-entry-media {
+  min-height: 0;
+  aspect-ratio: 4 / 3;
+  background: transparent;
+}
+
+.hobbit-entry-image-button,
+.hobbit-reader-image-button {
+  appearance: none;
+  display: block;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.hobbit-entry-image-button img,
+.hobbit-reader-image-button img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hobbit-entry-media .hobbit-entry-image-button:only-child {
+  grid-row: 1 / -1;
+  grid-column: 1 / -1;
+}
+
+.hobbit-entry-image-button:focus-visible,
+.hobbit-reader-image-button:focus-visible {
+  outline: 2px solid var(--hobbit-accent);
+  outline-offset: 2px;
+}
+
+.hobbit-reader-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 8px 0 28px;
+}
+
+.hobbit-reader-image-button {
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--hobbit-line);
+  background: var(--hobbit-paper-deep);
+}
+
+.hobbit-reader-image-button img {
+  box-shadow: none;
+}
+
+.hobbit-image-modal {
+  --hobbit-paper: #f7f2ea;
+  --hobbit-ink: #3d332c;
+  --hobbit-line: rgba(104, 81, 62, 0.16);
+  width: min(92vw, 960px);
+  max-width: 92vw;
+  border: 1px solid var(--hobbit-line);
+  border-radius: 16px;
+  background: var(--hobbit-paper);
+  color: var(--hobbit-ink);
+}
+
+.theme-dark .hobbit-image-modal {
+  --hobbit-paper: #231f1b;
+  --hobbit-ink: #eee4d8;
+  --hobbit-line: rgba(237, 221, 201, 0.14);
+}
+
+.hobbit-image-modal .modal-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  padding: 18px;
+}
+
+.hobbit-image-modal-image {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: min(78vh, 760px);
+  object-fit: contain;
+  border-radius: 10px;
+}
+
+.hobbit-editor-companion-actions {
+  justify-content: flex-start;
+  gap: 16px;
+}
+
+.hobbit-editor-action-group {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+}
+
+.hobbit-editor-diary-actions {
+  padding-left: 12px;
+  border-left: 1px solid var(--hobbit-line);
+}
+
+.hobbit-editor-icon-button,
+.hobbit-editor-action-button,
+.hobbit-editor-detail-button,
+.hobbit-reader-action-button {
+  box-shadow: none !important;
+}
+
+.hobbit-editor-icon-button:hover,
+.hobbit-editor-icon-button:focus-visible,
+.hobbit-editor-action-button:hover,
+.hobbit-editor-action-button:focus-visible,
+.hobbit-reader-action-button:hover,
+.hobbit-reader-action-button:focus-visible {
+  background: transparent !important;
+  color: var(--hobbit-accent);
+}
+
+.hobbit-editor-action-button.is-active {
+  border-color: transparent;
+  background: transparent;
+  color: var(--hobbit-accent);
+}
+
+@media (max-width: 700px) {
+  body.is-mobile.hobbit-mobile-fullscreen .view-content,
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-view-content,
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor {
+    padding-top: var(--hobbit-safe-top) !important;
+    padding-bottom: var(--hobbit-safe-bottom) !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-main {
+    padding-bottom: calc(var(--hobbit-bottom-nav-space) + var(--hobbit-safe-bottom)) !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-entry-list {
+    padding-bottom: calc(24px + var(--hobbit-safe-bottom));
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor .cm-content,
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor .markdown-preview-sizer {
+    padding-bottom: calc(30vh + var(--hobbit-bottom-nav-space) + var(--hobbit-safe-bottom)) !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-reader {
+    padding-bottom: calc(145px + var(--hobbit-safe-bottom));
+  }
+
+  .hobbit-topbar {
+    box-sizing: border-box;
+    min-height: 60px;
+    padding: 8px 15px;
+    gap: 10px;
+    flex-wrap: nowrap !important;
+  }
+
+  .hobbit-topbar > * {
+    transform: none !important;
+  }
+
+  .hobbit-brand {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .hobbit-brand-icon svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .hobbit-brand-name {
+    overflow: hidden;
+    font-size: 20px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .hobbit-top-actions {
+    width: auto !important;
+    flex: 0 0 auto;
+    gap: 4px;
+  }
+
+  .hobbit-top-actions .hobbit-icon-button {
+    display: inline-flex;
+  }
+
+  .hobbit-search-wrap:not(.has-value) .hobbit-search-clear {
+    display: none !important;
+  }
+
+  .hobbit-search-wrap.has-value .hobbit-search-clear {
+    display: inline-flex !important;
+  }
+
+  .hobbit-search-toggle {
+    display: inline-flex;
+    width: 36px;
+    height: 36px;
+  }
+
+  .hobbit-search-wrap {
+    display: none;
+    width: auto;
+    min-width: 0;
+    height: 36px;
+    flex: 1 1 170px;
+    padding: 0 8px;
+  }
+
+  .hobbit-search-wrap.is-open {
+    display: flex;
+  }
+
+  .hobbit-topbar:has(.hobbit-search-wrap.is-open) .hobbit-brand {
+    display: none;
+  }
+
+  .hobbit-topbar:has(.hobbit-search-wrap.is-open) .hobbit-top-actions {
+    width: 100% !important;
+    flex: 1 1 auto;
+  }
+
+  .hobbit-layout {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .hobbit-main {
+    order: 1;
+    width: auto;
+    padding: 22px 15px calc(var(--hobbit-bottom-nav-space) + var(--hobbit-safe-bottom));
+  }
+
+  .hobbit-sidebar {
+    order: 2;
+  }
+
+  .hobbit-stat-number {
+    font-size: 28px;
+  }
+
+  .hobbit-entry-card {
+    grid-template-columns: 57px minmax(0, 1fr);
+    gap: 12px;
+    min-height: 0;
+    padding: 13px;
+  }
+
+  .hobbit-entry-card.has-media {
+    grid-template-columns: 57px minmax(0, 1fr) 74px;
+  }
+
+  .hobbit-entry-card:not(.has-media) {
+    grid-template-columns: 57px minmax(0, 1fr);
+  }
+
+  .hobbit-entry-title-row .hobbit-icon-button {
+    width: 38px;
+    height: 38px;
+  }
+
+  .hobbit-entry-media {
+    display: grid;
+    width: 74px;
+    height: 68px;
+    aspect-ratio: auto;
+    align-self: start;
+  }
+
+  .hobbit-entry-preview {
+    -webkit-line-clamp: 3;
+  }
+
+  .hobbit-entry-tags {
+    margin-top: 8px;
+  }
+
+  .hobbit-editor-companion {
+    padding: 8px 12px;
+    background: color-mix(in srgb, var(--hobbit-paper) 94%, transparent 6%);
+    box-shadow: none;
+    backdrop-filter: blur(10px);
+  }
+
+  .hobbit-editor-companion-main {
+    display: block;
+    width: 100%;
+    transform: none;
+  }
+
+  .hobbit-diary-editor .cm-scroller {
+    padding-top: 14px !important;
+  }
+
+  .hobbit-diary-editor .markdown-preview-view {
+    padding-top: 0 !important;
+  }
+
+  .hobbit-editor-companion-actions {
+    width: 100%;
+    margin-left: 0;
+    padding-top: 3px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .hobbit-editor-companion-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .hobbit-editor-action-group {
+    gap: 2px;
+  }
+
+  .hobbit-editor-diary-actions {
+    padding-left: 8px;
+  }
+
+  .hobbit-editor-icon-button,
+  .hobbit-editor-action-button {
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    min-height: 38px;
+    padding: 0;
+    border: 0 !important;
+    border-radius: 50%;
+    background: transparent !important;
+    color: color-mix(in srgb, var(--hobbit-muted) 78%, var(--hobbit-paper) 22%) !important;
+  }
+
+  .hobbit-editor-action-button {
+    font-size: 0;
+  }
+
+  .hobbit-editor-icon-button svg,
+  .hobbit-editor-action-button .hobbit-button-icon svg {
+    width: 20px;
+    height: 20px;
+    color: inherit;
+    stroke: currentColor !important;
+    stroke-width: 1.35;
+  }
+
+  .hobbit-editor-icon-button:hover,
+  .hobbit-editor-icon-button:focus-visible,
+  .hobbit-editor-action-button:hover,
+  .hobbit-editor-action-button:focus-visible,
+  .hobbit-editor-action-button.is-active {
+    background: transparent !important;
+    color: var(--hobbit-accent) !important;
+  }
+
+  .hobbit-reader-gallery {
+    grid-template-columns: repeat(auto-fit, minmax(115px, 1fr));
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+
+  .hobbit-reader-navigation {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .hobbit-nav-day-button {
+    min-width: 0;
+    min-height: 40px;
+    padding: 0 8px;
+    overflow: hidden;
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .hobbit-reader-body {
+    padding-top: 24px;
+  }
+
+  .hobbit-image-modal {
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+  }
+
+  .hobbit-image-modal .modal-content {
+    min-height: 140px;
+    padding: 12px;
+  }
+
+  .hobbit-image-modal-image {
+    max-height: calc(78dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (max-width: 420px) {
+  .hobbit-entry-card {
+    grid-template-columns: 51px minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .hobbit-entry-card.has-media {
+    grid-template-columns: 51px minmax(0, 1fr) 66px;
+  }
+
+  .hobbit-entry-card:not(.has-media) {
+    grid-template-columns: 51px minmax(0, 1fr);
+  }
+
+  .hobbit-entry-title-row .hobbit-icon-button {
+    width: 36px;
+    height: 36px;
+  }
+
+  .hobbit-entry-media {
+    width: 66px;
+    height: 62px;
+  }
+}
+
+/* Keep the calendar available without letting it compete with the diary list. */
+.hobbit-section-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.hobbit-calendar-icon-button {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 50%;
+  background: transparent !important;
+  color: var(--hobbit-muted);
+  box-shadow: none !important;
+}
+
+.hobbit-calendar-icon-button:hover,
+.hobbit-calendar-icon-button:focus-visible,
+.hobbit-calendar-icon-button[aria-expanded="true"] {
+  background: transparent !important;
+  color: var(--hobbit-accent);
+}
+
+.hobbit-calendar-icon-button svg {
+  width: 19px;
+  height: 19px;
+  stroke-width: 1.4;
+}
+
+.hobbit-calendar-popover {
+  display: none;
+  width: min(100%, 340px);
+  margin: -3px 0 17px;
+  padding: 9px 0 2px;
+  border: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.hobbit-calendar-popover.is-open {
+  display: block;
+}
+
+.hobbit-calendar-popover .hobbit-calendar-header {
+  margin-bottom: 10px;
+}
+
+.hobbit-calendar-popover .hobbit-calendar-header .hobbit-icon-button {
+  border: 0 !important;
+  border-radius: 50%;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--hobbit-muted);
+}
+
+.hobbit-calendar-popover .hobbit-calendar-header .hobbit-icon-button:hover,
+.hobbit-calendar-popover .hobbit-calendar-header .hobbit-icon-button:focus-visible {
+  background: transparent !important;
+  color: var(--hobbit-accent);
+}
+
+.hobbit-calendar-popover .hobbit-calendar-day,
+.hobbit-calendar-popover .hobbit-calendar-empty {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.hobbit-calendar-popover .hobbit-calendar-day:hover,
+.hobbit-calendar-popover .hobbit-calendar-day.is-selected {
+  border-color: color-mix(in srgb, var(--hobbit-accent) 35%, transparent) !important;
+  background: color-mix(in srgb, var(--hobbit-accent) 7%, transparent) !important;
+  color: var(--hobbit-accent);
+}
+
+.hobbit-calendar-popover .hobbit-calendar-day.is-today {
+  background: color-mix(in srgb, var(--hobbit-accent) 5%, transparent) !important;
+}
+
+@media (max-width: 700px) {
+  .hobbit-calendar-icon-button {
+    width: 38px;
+    height: 38px;
+  }
+
+  .hobbit-calendar-popover {
+    width: min(100%, 340px);
+    margin: -2px 0 14px;
+    padding: 7px 0 1px;
+  }
+
+  .hobbit-calendar-popover .hobbit-calendar-grid {
+    grid-auto-rows: 32px;
+    column-gap: 4px;
+    row-gap: 3px;
+  }
+
+  .hobbit-calendar-popover .hobbit-calendar-day,
+  .hobbit-calendar-popover .hobbit-calendar-empty {
+    height: 32px;
+    border-radius: 9px;
+  }
+
+  .hobbit-reader-header {
+    padding-bottom: 34px;
+  }
+
+  .hobbit-reader-header > .hobbit-reader-actions {
+    right: -2px;
+    gap: 3px;
+    transform: translateY(4px);
+  }
+
+  .hobbit-reader-action-button {
+    width: 38px;
+    height: 38px;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 50%;
+    background: transparent !important;
+    box-shadow: none !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .hobbit-reader-action-button .svg-icon {
+    width: 20px !important;
+    height: 20px !important;
+    stroke-width: 1.35 !important;
+  }
+
+  .hobbit-reader-body {
+    width: calc(100% - 12px);
+    margin-inline: auto;
+    transform: translateX(8px);
+    text-align: left;
+  }
+
+  .hobbit-reader-tags {
+    margin-top: 9px;
+  }
+
+  .hobbit-reader-body {
+    padding-top: 14px;
+  }
+
+  .hobbit-reader-body p,
+  .hobbit-reader-body ul,
+  .hobbit-reader-body ol,
+  .hobbit-reader-body blockquote {
+    margin-top: 0.75em;
+    margin-bottom: 0.75em;
+  }
+
+  .hobbit-editor-companion-actions {
+    padding-top: 7px;
+    justify-content: space-between;
+    gap: 0;
+  }
+
+  .hobbit-editor-navigation-actions {
+    margin-left: -4px;
+  }
+
+  .hobbit-editor-diary-actions {
+    margin-right: -4px;
+  }
+}
+
+/* Final mobile layout pass: keep archive controls reachable above Obsidian's
+   floating navigation and keep empty/content cards on the same row width. */
+@media (max-width: 700px) {
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-view-content,
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor {
+    padding-bottom: calc(var(--hobbit-bottom-nav-space) + var(--hobbit-safe-bottom)) !important;
+    scroll-padding-bottom: calc(var(--hobbit-bottom-nav-space) + var(--hobbit-safe-bottom));
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-main {
+    padding-bottom: 28px !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-entry-list {
+    padding-bottom: 20px !important;
+  }
+
+  .hobbit-list-header {
+    box-sizing: border-box;
+    margin-top: 12px;
+    margin-bottom: 13px;
+    padding-top: 8px;
+    border-top: 1px solid var(--hobbit-line);
+  }
+
+  .hobbit-entry-list,
+  .hobbit-entry-card,
+  .hobbit-entry-date,
+  .hobbit-entry-content,
+  .hobbit-entry-title-row {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .hobbit-entry-card {
+    justify-self: stretch;
+  }
+
+  .hobbit-sidebar {
+    box-sizing: border-box;
+    border-top: 1px solid var(--hobbit-line);
+  }
+
+  .hobbit-reader-action-button {
+    color: color-mix(in srgb, var(--hobbit-muted) 68%, var(--hobbit-paper) 32%) !important;
+  }
+
+  .hobbit-reader-action-button:hover,
+  .hobbit-reader-action-button:focus-visible {
+    color: color-mix(in srgb, var(--hobbit-accent) 72%, var(--hobbit-paper) 28%) !important;
+  }
+
+  .hobbit-reader-action-button.is-active {
+    color: var(--hobbit-accent) !important;
+  }
+
+  .hobbit-reader-action-button .svg-icon,
+  .hobbit-reader-action-button svg {
+    color: inherit !important;
+    width: 22px !important;
+    height: 22px !important;
+    stroke: currentColor !important;
+    stroke-width: 1.3 !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .hobbit-entry-list,
+  .hobbit-entry-card {
+    width: 100%;
+    max-width: 100%;
   }
 }

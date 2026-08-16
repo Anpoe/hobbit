@@ -1,6 +1,7 @@
 const {
   ItemView,
   MarkdownRenderer,
+  Modal,
   Notice,
   Plugin,
   PluginSettingTab,
@@ -12,9 +13,9 @@ const {
 
 const HOME_VIEW_TYPE = "hobbit-home";
 const DIARY_VIEW_TYPE = "hobbit-diary";
+const DAILY_NOTES_PLUGIN_ID = "daily-notes";
 
 const DEFAULT_SETTINGS = {
-  diaryFolder: "Hobbit/Diary",
   attachmentFolder: "Hobbit/Attachments",
 };
 
@@ -58,17 +59,6 @@ class HobbitPlugin extends Plugin {
       id: "write-today",
       name: "写今天的日记",
       callback: () => void this.createTodayDiary(),
-    });
-
-    this.addCommand({
-      id: "mark-current-as-diary",
-      name: "将当前笔记标记为 Hobbit 日记",
-      checkCallback: (checking) => {
-        const file = this.app.workspace.getActiveFile();
-        if (!file) return false;
-        if (!checking) void this.markAsDiary(file);
-        return true;
-      },
     });
 
     this.addSettingTab(new HobbitSettingTab(this.app, this));
@@ -149,43 +139,99 @@ class HobbitPlugin extends Plugin {
     this.scheduleEditorChromeRefresh();
   }
 
+  async openImage(image) {
+    if (!(image instanceof TFile)) return;
+    const modal = new Modal(this.app);
+    modal.setTitle("照片");
+    modal.modalEl.classList.add("hobbit-image-modal");
+    modal.onOpen = () => {
+      const imageEl = document.createElement("img");
+      imageEl.className = "hobbit-image-modal-image";
+      imageEl.src = this.app.vault.getResourcePath(image);
+      imageEl.alt = "日记照片";
+      imageEl.decoding = "async";
+      modal.contentEl.appendChild(imageEl);
+    };
+    modal.open();
+  }
+
   async createTodayDiary() {
-    const date = localDateKey(new Date());
-    const file = await this.createDiaryForDate(date);
+    const source = this.getDailyNotesSource();
+    if (!source) {
+      new Notice("请先启用 Obsidian 核心插件“日记”");
+      return;
+    }
+
+    let file = null;
+    try {
+      file = await source.instance.getDailyNote();
+    } catch (error) {
+      console.error("Hobbit 无法通过核心日记插件创建日记", error);
+      new Notice("核心日记插件无法创建今天的日记，请检查它的文件夹和日期格式设置");
+      return;
+    }
+
+    if (!(file instanceof TFile)) {
+      new Notice("核心日记插件没有返回今天的日记，请检查它的文件夹和日期格式设置");
+      return;
+    }
     await this.openNativeEditor(file);
   }
 
-  async createDiaryForDate(date) {
-    await this.ensureFolder(this.settings.diaryFolder);
-    const path = normalizePath(`${this.settings.diaryFolder}/${date}.md`);
-    const existing = this.app.vault.getAbstractFileByPath(path);
-    if (existing instanceof TFile) return existing;
+  getDailyNotesSource() {
+    const internal = this.app.internalPlugins?.getEnabledPluginById?.(
+      DAILY_NOTES_PLUGIN_ID
+    );
+    const instance = internal?.instance || internal;
+    if (!instance || typeof instance.getDailyNote !== "function") return null;
 
-    const content = [
-      "---",
-      "diary: true",
-      `date: ${date}`,
-      "favorite: false",
-      "tags: []",
-      "---",
-      "",
-      "",
-    ].join("\n");
-    return this.app.vault.create(path, content);
+    const folder =
+      typeof instance.getFolder === "function" ? instance.getFolder() : null;
+    if (instance.options?.folder && !folder) return null;
+    const format =
+      typeof instance.getFormat === "function"
+        ? instance.getFormat()
+        : instance.options?.format || "YYYY-MM-DD";
+    if (typeof format !== "string" || !format.trim()) return null;
+
+    return {
+      instance,
+      folderPath: normalizePath(folder?.path || "").replace(/\/$/, ""),
+      format,
+    };
   }
 
-  async markAsDiary(file) {
-    if (!(file instanceof TFile) || file.extension !== "md") return;
-    await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
-      frontmatter.diary = true;
-      if (!frontmatter.date) {
-        const fromName = dateFromFilename(file.basename);
-        if (fromName) frontmatter.date = fromName;
-      }
-    });
-    new Notice("已将当前笔记标记为 Hobbit 日记");
-    this.scheduleEditorChromeRefresh();
-    await this.activateHome();
+  getDailyNoteDate(file, source = this.getDailyNotesSource()) {
+    if (!(file instanceof TFile) || file.extension !== "md" || !source) {
+      return "";
+    }
+
+    const folderPath = source.folderPath;
+    let relativePath = file.path;
+    if (folderPath) {
+      const prefix = `${folderPath}/`;
+      if (!file.path.startsWith(prefix)) return "";
+      relativePath = file.path.slice(prefix.length);
+    }
+
+    if (!relativePath.toLowerCase().endsWith(".md")) return "";
+    const dateText = relativePath.slice(0, -3);
+    if (!dateText) return "";
+
+    try {
+      const parsed = window.moment(dateText, source.format, true);
+    return parsed?.isValid?.() ? parsed.format("YYYY-MM-DD") : "";
+    } catch (error) {
+      return "";
+    }
+  }
+
+  getFrontmatter(file, raw) {
+    const cached =
+      file instanceof TFile
+        ? this.app.metadataCache.getFileCache(file)?.frontmatter
+        : null;
+    return cached ? { ...cached } : parseFrontmatter(raw);
   }
 
   async ensureFolder(folderPath) {
@@ -202,27 +248,30 @@ class HobbitPlugin extends Plugin {
   }
 
   async getDiaryEntries() {
+    const source = this.getDailyNotesSource();
+    if (!source) return [];
+
     const files = this.app.vault.getMarkdownFiles();
     const entries = [];
     for (const file of files) {
+      const date = this.getDailyNoteDate(file, source);
+      if (!date) continue;
+
       const raw = await this.app.vault.cachedRead(file);
-      const frontmatter = parseFrontmatter(raw);
-      if (!isDiary(frontmatter)) continue;
+      const frontmatter = this.getFrontmatter(file, raw);
 
       const body = stripFrontmatter(raw);
-      const date = normalizeDate(frontmatter.date) || dateFromFilename(file.basename);
-      const safeDate = date || localDateKey(new Date(file.stat.mtime));
       const title =
         cleanText(frontmatter.title) ||
         extractHeading(body) ||
-        formatLongDate(safeDate);
+        formatLongDate(date);
       const imageFiles = this.resolveImages(raw, file);
       entries.push({
         file,
         raw,
         body,
         frontmatter,
-        date: safeDate,
+        date,
         title,
         preview: makePreview(body, title),
         tags: collectTags(frontmatter, body),
@@ -267,7 +316,6 @@ class HobbitPlugin extends Plugin {
 
   async setFavorite(file, value) {
     await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
-      frontmatter.diary = true;
       frontmatter.favorite = value;
     });
     this.scheduleRefresh();
@@ -277,7 +325,6 @@ class HobbitPlugin extends Plugin {
     const tag = rawTag.trim().replace(/^#/, "");
     if (!tag) return;
     await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
-      frontmatter.diary = true;
       const current = normalizeTags(frontmatter.tags);
       if (!current.includes(tag)) current.push(tag);
       frontmatter.tags = current;
@@ -368,8 +415,8 @@ class HobbitPlugin extends Plugin {
 
     const raw = await this.app.vault.cachedRead(file);
     if (revision !== this.editorChromeRevision) return;
-    const frontmatter = parseFrontmatter(raw);
-    if (!isDiary(frontmatter)) {
+    const frontmatter = this.getFrontmatter(file, raw);
+    if (!this.getDailyNoteDate(file)) {
       this.removeEditorChrome(view);
       return;
     }
@@ -402,13 +449,10 @@ class HobbitPlugin extends Plugin {
     const view = leaf?.view;
     const viewType = view?.getViewType?.();
     const file = view?.file;
-    const diaryFolder = normalizePath(this.settings.diaryFolder).replace(/\/$/, "");
     const isDiaryMarkdown =
       viewType === "markdown" &&
       file instanceof TFile &&
-      (view.contentEl?.classList.contains("hobbit-diary-editor") ||
-        file.path === diaryFolder ||
-        file.path.startsWith(`${diaryFolder}/`));
+      this.getDailyNoteDate(file);
     const isHobbitView =
       viewType === HOME_VIEW_TYPE || viewType === DIARY_VIEW_TYPE || isDiaryMarkdown;
     document.body?.classList.toggle("hobbit-mobile-fullscreen", isHobbitView);
@@ -465,10 +509,7 @@ class HobbitPlugin extends Plugin {
   renderEditorChrome(view, file, raw, frontmatter, entries) {
     const contentEl = view.contentEl;
     const body = stripFrontmatter(raw);
-    const date =
-      normalizeDate(frontmatter.date) ||
-      dateFromFilename(file.basename) ||
-      localDateKey(new Date(file.stat.mtime));
+    const date = this.getDailyNoteDate(file);
     const tags = collectTags(frontmatter, body);
     const images = this.resolveImages(raw, file);
     const favorite = frontmatter.favorite === true || frontmatter.favorite === "true";
@@ -505,10 +546,18 @@ class HobbitPlugin extends Plugin {
     main.appendChild(context);
 
     const actions = el("div", "hobbit-editor-companion-actions");
+    const navigationActions = el(
+      "div",
+      "hobbit-editor-action-group hobbit-editor-navigation-actions"
+    );
+    const diaryActions = el(
+      "div",
+      "hobbit-editor-action-group hobbit-editor-diary-actions"
+    );
     const homeButton = iconButton("打开 Hobbit 主页", "home");
     homeButton.classList.add("hobbit-editor-icon-button");
     homeButton.addEventListener("click", () => void this.activateHome());
-    actions.appendChild(homeButton);
+    navigationActions.appendChild(homeButton);
 
     const previousButton = iconButton(
       previous ? `前一天 · ${formatMonthDay(previous.date)}` : "没有更早的日记",
@@ -519,7 +568,7 @@ class HobbitPlugin extends Plugin {
     previousButton.addEventListener("click", () => {
       if (previous) void this.openNativeEditor(previous.file);
     });
-    actions.appendChild(previousButton);
+    navigationActions.appendChild(previousButton);
 
     const nextButton = iconButton(
       next ? `后一天 · ${formatMonthDay(next.date)}` : "没有更新的日记",
@@ -530,7 +579,7 @@ class HobbitPlugin extends Plugin {
     nextButton.addEventListener("click", () => {
       if (next) void this.openNativeEditor(next.file);
     });
-    actions.appendChild(nextButton);
+    navigationActions.appendChild(nextButton);
 
     const photoButton = button("照片", "hobbit-editor-action-button", "image-plus");
     photoButton.setAttribute("aria-label", "添加照片");
@@ -550,7 +599,7 @@ class HobbitPlugin extends Plugin {
       photoInput.value = "";
     });
     photoButton.addEventListener("click", () => photoInput.click());
-    actions.append(photoButton, photoInput);
+    diaryActions.append(photoButton, photoInput);
 
     const tagButton = button("标签", "hobbit-editor-action-button", "tag");
     tagButton.setAttribute("aria-label", "添加标签");
@@ -561,7 +610,7 @@ class HobbitPlugin extends Plugin {
         void this.addTag(file, value).then(() => this.scheduleEditorChromeRefresh());
       }
     });
-    actions.appendChild(tagButton);
+    diaryActions.appendChild(tagButton);
 
     const favoriteButton = button(
       favorite ? "已收藏" : "收藏",
@@ -574,7 +623,7 @@ class HobbitPlugin extends Plugin {
     favoriteButton.addEventListener("click", () => {
       void this.setFavorite(file, !favorite).then(() => this.scheduleEditorChromeRefresh());
     });
-    actions.appendChild(favoriteButton);
+    diaryActions.appendChild(favoriteButton);
 
     const infoButton = button("日记信息", "hobbit-editor-action-button", "info");
     infoButton.setAttribute("aria-label", "日记信息");
@@ -584,13 +633,15 @@ class HobbitPlugin extends Plugin {
       const open = chrome.classList.toggle("is-info-open");
       infoButton.setAttribute("aria-expanded", String(open));
     });
-    actions.appendChild(infoButton);
+    diaryActions.appendChild(infoButton);
 
     const readerButton = button("阅读", "hobbit-editor-action-button", "book-open");
     readerButton.setAttribute("aria-label", "阅读模式");
     readerButton.title = "阅读模式";
     readerButton.addEventListener("click", () => void this.openDiary(file.path));
-    actions.appendChild(readerButton);
+    diaryActions.appendChild(readerButton);
+
+    actions.append(navigationActions, diaryActions);
 
     main.appendChild(actions);
     chrome.appendChild(main);
@@ -644,8 +695,10 @@ class HobbitHomeView extends ItemView {
     this.plugin = plugin;
     this.filter = "all";
     this.searchText = "";
+    this.searchOpen = false;
     this.dateFilter = null;
     this.calendarDate = new Date();
+    this.calendarOpen = false;
     this.entries = [];
   }
 
@@ -694,19 +747,42 @@ class HobbitHomeView extends ItemView {
     topbar.appendChild(brand);
 
     const topActions = el("div", "hobbit-top-actions");
-    const searchWrap = el("label", "hobbit-search-wrap");
+    const searchToggle = iconButton("展开搜索", "search", "hobbit-search-toggle");
+    searchToggle.setAttribute("aria-expanded", String(this.searchOpen));
+    const searchWrap = el("div", "hobbit-search-wrap hobbit-search-collapsible");
     const searchIcon = el("span", "hobbit-search-icon");
     setIcon(searchIcon, "search");
     const search = document.createElement("input");
     search.className = "hobbit-search";
+    search.type = "search";
+    search.setAttribute("aria-label", "搜索标题、正文、标签和附件");
     search.placeholder = "搜索日记";
     search.value = this.searchText;
     search.addEventListener("input", () => {
       this.searchText = search.value;
+      searchWrap.classList.toggle("has-value", Boolean(this.searchText.trim()));
       this.renderList();
     });
-    searchWrap.append(searchIcon, search);
-    topActions.appendChild(searchWrap);
+    const clearSearch = iconButton("清除搜索", "x", "hobbit-search-clear");
+    clearSearch.addEventListener("click", () => {
+      search.value = "";
+      this.searchText = "";
+      searchWrap.classList.remove("has-value");
+      search.focus();
+      this.renderList();
+    });
+    searchWrap.append(searchIcon, search, clearSearch);
+    searchToggle.addEventListener("click", () => {
+      this.searchOpen = !this.searchOpen;
+      searchToggle.setAttribute("aria-expanded", String(this.searchOpen));
+      searchToggle.setAttribute("aria-label", this.searchOpen ? "收起搜索" : "展开搜索");
+      searchToggle.title = this.searchOpen ? "收起搜索" : "展开搜索";
+      searchWrap.classList.toggle("is-open", this.searchOpen);
+      if (this.searchOpen) search.focus();
+    });
+    searchWrap.classList.toggle("is-open", this.searchOpen);
+    searchWrap.classList.toggle("has-value", Boolean(this.searchText.trim()));
+    topActions.append(searchToggle, searchWrap);
     const refreshButton = iconButton("刷新", "refresh-cw");
     refreshButton.addEventListener("click", () => void this.refresh());
     topActions.appendChild(refreshButton);
@@ -721,9 +797,6 @@ class HobbitHomeView extends ItemView {
     this.statTotal = el("strong", "hobbit-stat-number", "0");
     statBlock.append(this.statTotal, el("span", "hobbit-stat-label", "篇日记"));
     sidebar.appendChild(statBlock);
-
-    this.calendarEl = el("div", "hobbit-calendar-panel");
-    sidebar.appendChild(this.calendarEl);
 
     const navTitle = el("div", "hobbit-sidebar-label", "档案");
     sidebar.appendChild(navTitle);
@@ -784,12 +857,26 @@ class HobbitHomeView extends ItemView {
     const listHeader = el("div", "hobbit-list-header");
     const listHeading = el("div", "hobbit-list-heading");
     listHeading.appendChild(el("span", "hobbit-eyebrow", "YOUR DAYS"));
+    const listTitleRow = el("div", "hobbit-section-title-row");
     this.listTitle = el("h2", "hobbit-section-title", "全部日记");
-    listHeading.appendChild(this.listTitle);
+    listTitleRow.appendChild(this.listTitle);
+    this.calendarToggle = iconButton("打开日历", "calendar-days", "hobbit-calendar-icon-button");
+    this.calendarToggle.setAttribute("aria-expanded", "false");
+    this.calendarToggle.setAttribute("aria-controls", "hobbit-calendar-panel");
+    this.calendarToggle.addEventListener("click", () => {
+      this.calendarOpen = !this.calendarOpen;
+      this.renderCalendar();
+    });
+    listTitleRow.appendChild(this.calendarToggle);
+    listHeading.appendChild(listTitleRow);
     listHeader.appendChild(listHeading);
     this.countEl = el("span", "hobbit-list-count", "0 篇");
     listHeader.appendChild(this.countEl);
     main.appendChild(listHeader);
+
+    this.calendarEl = el("div", "hobbit-calendar-panel hobbit-calendar-popover");
+    this.calendarEl.id = "hobbit-calendar-panel";
+    main.appendChild(this.calendarEl);
 
     this.dateFilterEl = el("button", "hobbit-date-filter");
     this.dateFilterEl.addEventListener("click", () => {
@@ -815,7 +902,12 @@ class HobbitHomeView extends ItemView {
     if (!this.heroStatus) return;
     const today = this.entries.find((entry) => entry.date === localDateKey(new Date()));
     if (today) {
-      this.heroTitle.textContent = today.title;
+      const generatedHeading =
+        isGeneratedDiaryHeading(today.body, today.date) ||
+        today.title === `${formatLongDate(today.date)} ${weekdayFor(today.date)}`;
+      this.heroTitle.textContent = generatedHeading
+        ? formatLongDate(today.date)
+        : today.title;
       this.heroStatus.textContent = "今天的档案已经打开，继续写下去。";
       this.heroPrimary.replaceChildren();
       setIcon(this.heroPrimary, "edit-3");
@@ -842,6 +934,13 @@ class HobbitHomeView extends ItemView {
   renderCalendar() {
     if (!this.calendarEl) return;
     this.calendarEl.replaceChildren();
+    this.calendarEl.classList.toggle("is-open", this.calendarOpen);
+    const calendarLabel = this.calendarOpen ? "关闭日历" : "打开日历";
+    this.calendarToggle?.setAttribute("aria-expanded", String(this.calendarOpen));
+    this.calendarToggle?.setAttribute("aria-label", calendarLabel);
+    if (this.calendarToggle) this.calendarToggle.title = calendarLabel;
+    if (!this.calendarOpen) return;
+
     const year = this.calendarDate.getFullYear();
     const month = this.calendarDate.getMonth();
     const header = el("div", "hobbit-calendar-header");
@@ -885,6 +984,8 @@ class HobbitHomeView extends ItemView {
       if (date === this.dateFilter) cell.classList.add("is-selected");
       cell.addEventListener("click", () => {
         const entry = this.entries.find((item) => item.date === date);
+        this.calendarOpen = false;
+        this.renderCalendar();
         if (entry) {
           void this.plugin.openDiary(entry.file.path);
         } else {
@@ -910,7 +1011,13 @@ class HobbitHomeView extends ItemView {
     const query = this.searchText.trim().toLowerCase();
     if (query) {
       items = items.filter((entry) => {
-        const haystack = [entry.title, entry.preview, entry.date, ...entry.tags]
+        const haystack = [
+          entry.title,
+          entry.preview,
+          entry.date,
+          ...entry.tags,
+          ...entry.images.flatMap((image) => [image.basename, image.path]),
+        ]
           .join(" ")
           .toLowerCase();
         return haystack.includes(query);
@@ -962,6 +1069,7 @@ class HobbitHomeView extends ItemView {
 
   renderEntryCard(entry) {
     const card = el("article", "hobbit-entry-card");
+    card.classList.toggle("has-media", entry.images.length > 0);
     card.tabIndex = 0;
     card.addEventListener("click", () => void this.plugin.openDiary(entry.file.path));
     card.addEventListener("keydown", (event) => {
@@ -988,6 +1096,9 @@ class HobbitHomeView extends ItemView {
       "star",
       entry.favorite ? "is-active" : ""
     );
+    favorite.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+    });
     favorite.addEventListener("click", (event) => {
       event.stopPropagation();
       void this.plugin.setFavorite(entry.file, !entry.favorite);
@@ -1002,22 +1113,20 @@ class HobbitHomeView extends ItemView {
     }
     card.appendChild(content);
 
-    const media = el("div", "hobbit-entry-media");
     if (entry.images.length) {
-      for (const image of entry.images.slice(0, 3)) {
-        const img = document.createElement("img");
-        img.src = this.plugin.app.vault.getResourcePath(image);
-        img.alt = "日记照片";
-        media.appendChild(img);
+      const media = el("div", "hobbit-entry-media");
+      appendImageGallery(
+        media,
+        entry.images.slice(0, 3),
+        this.plugin,
+        entry.file.path,
+        "hobbit-entry-image-button"
+      );
+      if (entry.images.length > 3) {
+        media.appendChild(el("span", "hobbit-more-images", `+${entry.images.length - 3}`));
       }
-      if (entry.images.length > 3) media.appendChild(el("span", "hobbit-more-images", `+${entry.images.length - 3}`));
-    } else {
-      media.classList.add("is-empty");
-      const icon = el("span", "hobbit-media-placeholder");
-      setIcon(icon, "image");
-      media.appendChild(icon);
+      card.appendChild(media);
     }
-    card.appendChild(media);
     return card;
   }
 }
@@ -1073,9 +1182,13 @@ class HobbitDiaryView extends ItemView {
     }
 
     const raw = await this.plugin.app.vault.cachedRead(file);
-    const frontmatter = parseFrontmatter(raw);
+    const frontmatter = this.plugin.getFrontmatter(file, raw);
     const body = stripFrontmatter(raw);
-    const date = normalizeDate(frontmatter.date) || dateFromFilename(file.basename) || localDateKey(new Date(file.stat.mtime));
+    const date = this.plugin.getDailyNoteDate(file);
+    if (!date) {
+      this.contentEl.appendChild(el("div", "hobbit-reader-missing", "这篇笔记不符合当前核心日记设置"));
+      return;
+    }
     const title = cleanText(frontmatter.title) || extractHeading(body) || formatLongDate(date);
     const entries = await this.plugin.getDiaryEntries();
     const index = entries.findIndex((entry) => entry.file.path === file.path);
@@ -1149,8 +1262,16 @@ class HobbitDiaryView extends ItemView {
 
     const articleBody = el("div", "hobbit-reader-body markdown-preview-view");
     reader.appendChild(articleBody);
-    const renderBody = removeFirstHeading(body);
+    const renderBody = removeInlineTags(
+      removeImageEmbeds(removeFirstHeading(body))
+    );
     await MarkdownRenderer.renderMarkdown(renderBody, articleBody, file.path, this);
+
+    if (images.length) {
+      const gallery = el("div", "hobbit-reader-gallery");
+      appendImageGallery(gallery, images, this.plugin, file.path, "hobbit-reader-image-button");
+      reader.appendChild(gallery);
+    }
 
     const navigation = el("nav", "hobbit-reader-navigation");
     const previousButton = button(
@@ -1187,20 +1308,22 @@ class HobbitSettingTab extends PluginSettingTab {
     containerEl.replaceChildren();
     containerEl.appendChild(el("h2", "hobbit-settings-title", "Hobbit 日记"));
     containerEl.appendChild(
-      el("p", "hobbit-settings-intro", "Hobbit 使用普通 Markdown 保存每天的日记，并用 diary: true 标识插件日记。")
+      el(
+        "p",
+        "hobbit-settings-intro",
+        "Hobbit 的日记来源完全跟随 Obsidian 核心插件“日记”的设置；模板和 frontmatter 不需要配合 Hobbit。"
+      )
     );
-    new Setting(containerEl)
-      .setName("日记文件夹")
-      .setDesc("新建日记的位置；只识别带有 diary: true 的 Markdown 文件。")
-      .addText((text) =>
-        text
-          .setPlaceholder(DEFAULT_SETTINGS.diaryFolder)
-          .setValue(this.plugin.settings.diaryFolder)
-          .onChange(async (value) => {
-            this.plugin.settings.diaryFolder = value.trim() || DEFAULT_SETTINGS.diaryFolder;
-            await this.plugin.saveSettings();
-          })
-      );
+    const source = this.plugin.getDailyNotesSource();
+    containerEl.appendChild(
+      el(
+        "p",
+        "hobbit-settings-source",
+        source
+          ? `当前识别规则：${source.folderPath || "核心插件默认位置"} · ${source.format}`
+          : "当前未检测到已启用的核心插件“日记”。"
+      )
+    );
     new Setting(containerEl)
       .setName("附件文件夹")
       .setDesc("通过 Hobbit 添加的照片会保存到这里。")
@@ -1294,8 +1417,43 @@ function removeFirstHeading(body) {
   return body.replace(/^\s*#\s+[^\r\n]+\r?\n?/, "");
 }
 
-function isDiary(frontmatter) {
-  return frontmatter.diary === true || frontmatter.diary === "true";
+function removeImageEmbeds(body) {
+  return body
+    .replace(/^\s*!\[\[[^\]]+\]\]\s*$/gm, "")
+    .replace(/^\s*!\[[^\]]*\]\([^)]*\)\s*$/gm, "")
+    .replace(/!\[\[[^\]]+\]\]/g, "")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "");
+}
+
+function removeInlineTags(body) {
+  return body
+    .replace(/^\s*(?:#[^\s#，。！？、；：]+\s*)+$/gm, "")
+    .replace(/(^|[\s\u3000，。！？、；：])#[^\s#，。！？、；：]+/g, "$1")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
+function appendImageGallery(container, images, plugin, sourcePath, buttonClass) {
+  images.forEach((image, index) => {
+    const imageButton = document.createElement("button");
+    imageButton.type = "button";
+    imageButton.className = buttonClass;
+    imageButton.setAttribute("aria-label", `查看第 ${index + 1} 张日记照片`);
+    imageButton.title = "查看大图";
+    imageButton.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+    });
+    imageButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void plugin.openImage(image, sourcePath);
+    });
+    const img = document.createElement("img");
+    img.src = plugin.app.vault.getResourcePath(image);
+    img.alt = "日记照片";
+    img.loading = "lazy";
+    imageButton.appendChild(img);
+    container.appendChild(imageButton);
+  });
 }
 
 function extractHeading(body) {
@@ -1328,14 +1486,37 @@ function countWords(body) {
 }
 
 function makePreview(body, title) {
-  let value = body
-    .replace(/^\s*#\s+[^\r\n]+\r?\n?/, "")
+  let inFence = false;
+  let inListContinuation = false;
+  const proseLines = [];
+  for (const line of body.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (/^```/.test(trimmed)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const isListItem = /^\s*(?:[-*+]\s+|\d+[.)]\s+)(?:\[[ xX]\]\s*)?/.test(line);
+    if (isListItem) {
+      inListContinuation = true;
+      continue;
+    }
+    if (inListContinuation && /^\s{2,}\S/.test(line)) continue;
+    inListContinuation = false;
+    if (/^\s*#{1,6}\s+/.test(line)) continue;
+    if (/^\s*(?:#[^\s#，。！？、；：]+\s*)+$/.test(line)) continue;
+    if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) continue;
+    if (/^\s*\|.*\|\s*$/.test(line)) continue;
+    proseLines.push(line.replace(/^\s*>\s?/, ""));
+  }
+
+  let value = proseLines.join("\n")
+    .replace(/^\s*#\s+[^\r\n]+\r?\n?/m, "")
     .replace(/!\[\[[^\]]+\]\]/g, "")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
-    .replace(/^\s*[-*>#`]+\s*/gm, "")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/(^|[\s\u3000，。！？、；：])#[^\s#，。！？、；：]+/g, "$1")
     .replace(/[*_~]/g, "")
-    .replace(/#[^\s#]+/g, "")
     .replace(/\s+/g, " ")
     .trim();
   if (value === title) value = "";
@@ -1360,19 +1541,6 @@ function normalizeTags(value) {
 
 function cleanText(value) {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function normalizeDate(value) {
-  if (typeof value !== "string") return "";
-  const match = value.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
-  if (!match) return "";
-  return `${match[1]}-${String(match[2]).padStart(2, "0")}-${String(match[3]).padStart(2, "0")}`;
-}
-
-function dateFromFilename(name) {
-  const match = name.match(/(\d{4})[-_.](\d{1,2})[-_.](\d{1,2})/);
-  if (!match) return "";
-  return `${match[1]}-${String(match[2]).padStart(2, "0")}-${String(match[3]).padStart(2, "0")}`;
 }
 
 function localDateKey(date) {
