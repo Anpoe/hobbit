@@ -2494,6 +2494,69 @@ body.hobbit-mobile-fullscreen .mobile-navbar {
   }
 }
 
+/* Mobile editor + shell final pass.
+   Keep Hobbit's companion controls and Obsidian's native Markdown editor in
+   the same view: the companion owns its intrinsic height, while the native
+   editor receives the remaining viewport and scrolls independently. */
+@media (max-width: 700px) {
+  html body.is-mobile.hobbit-mobile-fullscreen,
+  html body.is-mobile.hobbit-mobile-fullscreen .app-container,
+  html body.is-mobile.hobbit-mobile-fullscreen .workspace,
+  html body.is-mobile.hobbit-mobile-fullscreen .horizontal-main-container,
+  html body.is-mobile.hobbit-mobile-fullscreen .workspace-split.mod-root,
+  html body.is-mobile.hobbit-mobile-fullscreen .workspace-tabs,
+  html body.is-mobile.hobbit-mobile-fullscreen .workspace-tab-container,
+  html body.is-mobile.hobbit-mobile-fullscreen .workspace-leaf,
+  html body.is-mobile.hobbit-mobile-fullscreen .workspace-leaf-content,
+  html body.is-mobile.hobbit-mobile-fullscreen .view-content {
+    --background-primary: var(--hobbit-mobile-paper) !important;
+    --background-primary-alt: var(--hobbit-mobile-paper) !important;
+    --background-secondary: var(--hobbit-mobile-paper) !important;
+    --background-secondary-alt: var(--hobbit-mobile-paper) !important;
+    --mobile-sidebar-background: var(--hobbit-mobile-paper) !important;
+    background: var(--hobbit-mobile-paper) !important;
+    background-color: var(--hobbit-mobile-paper) !important;
+    background-image: none !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor {
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 100% !important;
+    height: 100% !important;
+    overflow: hidden !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor > .hobbit-editor-companion {
+    flex: 0 0 auto !important;
+    width: 100% !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor > .markdown-source-view,
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor > .markdown-preview-view {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    height: auto !important;
+    overflow: hidden !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor .cm-editor {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    height: 100% !important;
+    overflow: hidden !important;
+  }
+
+  body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor .cm-scroller {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    height: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+  }
+}
+
 /* Keep the desktop editor toolbar visually consistent with the phone toolbar. */
 @media (min-width: 701px) {
   .hobbit-editor-companion {
