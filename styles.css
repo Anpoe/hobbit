@@ -2493,3 +2493,66 @@ body.hobbit-mobile-fullscreen .mobile-navbar {
     max-width: 100%;
   }
 }
+
+/* Keep the desktop editor toolbar visually consistent with the phone toolbar. */
+@media (min-width: 701px) {
+  .hobbit-editor-companion {
+    background: color-mix(in srgb, var(--hobbit-paper) 88%, transparent 12%) !important;
+    box-shadow: 0 5px 18px rgba(82, 56, 39, 0.05) !important;
+    backdrop-filter: blur(14px);
+  }
+
+  .hobbit-editor-icon-button,
+  .hobbit-editor-action-button {
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    min-height: 38px;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 50%;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .hobbit-editor-action-button {
+    font-size: 0;
+  }
+
+  .hobbit-editor-action-button .hobbit-button-icon {
+    display: inline-flex;
+  }
+
+  .hobbit-editor-icon-button svg,
+  .hobbit-editor-action-button .hobbit-button-icon svg {
+    width: 20px;
+    height: 20px;
+    color: inherit;
+    stroke: currentColor !important;
+    stroke-width: 1.35;
+  }
+
+  .hobbit-editor-icon-button:hover,
+  .hobbit-editor-icon-button:focus-visible,
+  .hobbit-editor-action-button:hover,
+  .hobbit-editor-action-button:focus-visible,
+  .hobbit-editor-action-button.is-active {
+    background: transparent !important;
+    color: var(--hobbit-accent) !important;
+  }
+}
+
+/* Use one optical icon size in both desktop and mobile editor toolbars. */
+.hobbit-editor-icon-button svg,
+.hobbit-editor-action-button .hobbit-button-icon svg,
+.hobbit-editor-action-button > svg {
+  width: 22px !important;
+  height: 22px !important;
+  color: inherit;
+  stroke: currentColor !important;
+  stroke-width: 1.35 !important;
+}
+
+.hobbit-editor-navigation-actions .hobbit-editor-icon-button:not(:first-child) svg {
+  transform: scale(1.2);
+}
