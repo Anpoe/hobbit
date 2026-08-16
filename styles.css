@@ -1113,12 +1113,25 @@
 }
 
 .hobbit-nav-day-button {
+  gap: 6px;
   min-height: 42px;
   padding: 0 14px;
   border: 1px solid var(--hobbit-line);
   border-radius: 10px;
   color: var(--hobbit-ink);
   font-size: 12px;
+}
+
+.hobbit-nav-day-button .hobbit-button-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.hobbit-nav-day-button.is-next .hobbit-button-icon {
+  order: 2;
 }
 
 .hobbit-nav-day-button:disabled {
@@ -2361,7 +2374,7 @@ body.hobbit-mobile-fullscreen .mobile-navbar {
     content: "";
     position: absolute;
     right: 0;
-    bottom: -4px;
+    bottom: -6px;
     left: 0;
     height: 1px;
     background: var(--hobbit-line);
@@ -2402,7 +2415,7 @@ body.hobbit-mobile-fullscreen .mobile-navbar {
 
   .hobbit-reader-tags {
     margin-top: 9px;
-    transform: translateY(9px);
+    transform: translateY(11px);
   }
 
   .hobbit-reader-body {
@@ -2474,6 +2487,10 @@ body.hobbit-mobile-fullscreen .mobile-navbar {
 
   .hobbit-sidebar {
     box-sizing: border-box;
+    width: calc(100% - 30px);
+    max-width: calc(100% - 30px);
+    margin-inline: 15px;
+    padding-inline: 0;
     border-top: 1px solid var(--hobbit-line);
   }
 
@@ -2862,12 +2879,12 @@ body.hobbit-mobile-fullscreen .mobile-navbar {
   }
 
   body.is-mobile.hobbit-mobile-fullscreen .hobbit-main {
-    min-height: 100% !important;
-    padding-bottom: calc(24px + var(--hobbit-bottom-nav-space) + var(--hobbit-safe-bottom)) !important;
+    min-height: 0 !important;
+    padding-bottom: 28px !important;
   }
 
   body.is-mobile.hobbit-mobile-fullscreen .hobbit-entry-list {
-    padding-bottom: calc(18px + var(--hobbit-bottom-nav-space) + var(--hobbit-safe-bottom)) !important;
+    padding-bottom: 20px !important;
   }
 
   body.is-mobile.hobbit-mobile-fullscreen .hobbit-reader {

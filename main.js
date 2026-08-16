@@ -1334,19 +1334,21 @@ class HobbitDiaryView extends ItemView {
 
     const navigation = el("nav", "hobbit-reader-navigation");
     const previousButton = button(
-      previous ? `← ${formatMonthDay(previous.date)}` : "没有更早的日记",
+      previous ? formatMonthDay(previous.date) : "没有更早的日记",
       "hobbit-nav-day-button",
       "arrow-left"
     );
+    previousButton.classList.add("is-previous");
     previousButton.disabled = !previous;
     previousButton.addEventListener("click", () => {
       if (previous) void this.plugin.openDiary(previous.file.path);
     });
     const nextButton = button(
-      next ? `${formatMonthDay(next.date)} →` : "没有更新的日记",
+      next ? formatMonthDay(next.date) : "没有更新的日记",
       "hobbit-nav-day-button",
       "arrow-right"
     );
+    nextButton.classList.add("is-next");
     nextButton.disabled = !next;
     nextButton.addEventListener("click", () => {
       if (next) void this.plugin.openDiary(next.file.path);
