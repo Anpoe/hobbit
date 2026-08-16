@@ -136,6 +136,15 @@ class HobbitPlugin extends Plugin {
     if (!(file instanceof TFile)) return;
     const leaf = this.app.workspace.getLeaf("tab");
     await leaf.openFile(file, { active: true });
+
+    // Hobbit's edit entry is explicit: always leave the note in Obsidian's
+    // source editor, even when the note was previously opened in reading mode.
+    const view = leaf.view;
+    if (view?.getViewType?.() === "markdown" && typeof view.setMode === "function") {
+      view.setMode("source");
+      view.editor?.focus?.();
+    }
+
     this.scheduleEditorChromeRefresh();
   }
 
