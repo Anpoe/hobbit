@@ -2354,6 +2354,18 @@ body.hobbit-mobile-fullscreen .mobile-navbar {
 
   .hobbit-reader-header {
     padding-bottom: 34px;
+    border-bottom-color: transparent;
+  }
+
+  .hobbit-reader-header::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: -4px;
+    left: 0;
+    height: 1px;
+    background: var(--hobbit-line);
+    pointer-events: none;
   }
 
   .hobbit-reader-header > .hobbit-reader-actions {
@@ -2390,7 +2402,7 @@ body.hobbit-mobile-fullscreen .mobile-navbar {
 
   .hobbit-reader-tags {
     margin-top: 9px;
-    transform: translateY(5px);
+    transform: translateY(9px);
   }
 
   .hobbit-reader-body {
