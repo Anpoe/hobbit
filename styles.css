@@ -2556,3 +2556,18 @@ body.hobbit-mobile-fullscreen .mobile-navbar {
 .hobbit-editor-navigation-actions .hobbit-editor-icon-button:not(:first-child) svg {
   transform: scale(1.2);
 }
+
+/* Give the reader toolbar the same comfortable touch target and optical size. */
+.hobbit-reader-action-button {
+  width: 38px !important;
+  min-width: 38px !important;
+  height: 38px !important;
+  min-height: 38px !important;
+}
+
+.hobbit-reader-action-button .svg-icon,
+.hobbit-reader-action-button svg {
+  width: 22px !important;
+  height: 22px !important;
+  stroke-width: 1.35 !important;
+}
