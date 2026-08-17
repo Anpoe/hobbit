@@ -41,6 +41,8 @@ class HobbitPlugin extends Plugin {
     this.editorChromeTimer = null;
     this.editorChromeRevision = 0;
     this.hobbitNativeFullscreenOwned = false;
+    this.hobbitLeaf = null;
+    this.hobbitEditorLeaves = new WeakSet();
 
     this.registerView(HOME_VIEW_TYPE, (leaf) => new HobbitHomeView(leaf, this));
     this.registerView(DIARY_VIEW_TYPE, (leaf) => new HobbitDiaryView(leaf, this));
@@ -102,11 +104,15 @@ class HobbitPlugin extends Plugin {
     if (this.editorChromeTimer) window.clearTimeout(this.editorChromeTimer);
     this.removeEditorChromeFromAllLeaves();
     this.updateMobileFullscreen(null);
+    this.hobbitLeaf = null;
+    this.hobbitEditorLeaves = new WeakSet();
   }
 
   async activateHome() {
     const leaf = this.getHobbitLeaf();
+    this.markHobbitLeaf(leaf);
     await leaf.setViewState({ type: HOME_VIEW_TYPE, active: true });
+    this.pruneDuplicateHobbitLeaves(leaf);
     this.app.workspace.revealLeaf(leaf);
     this.updateMobileFullscreen(leaf);
   }
@@ -120,27 +126,73 @@ class HobbitPlugin extends Plugin {
 
     return (
       viewType === "markdown" &&
+      (this.hobbitEditorLeaves.has(leaf) ||
+        leaf.containerEl?.classList.contains("hobbit-page-leaf")) &&
       view.file instanceof TFile &&
       Boolean(this.getDailyNoteDate(view.file))
     );
   }
 
+  markHobbitLeaf(leaf, editor = false) {
+    if (!leaf) return leaf;
+    this.hobbitLeaf = leaf;
+    leaf.containerEl?.classList.add("hobbit-page-leaf");
+    if (editor) this.hobbitEditorLeaves.add(leaf);
+    return leaf;
+  }
+
+  getWorkspaceLeaves() {
+    return Array.from(
+      new Set([
+        ...this.app.workspace.getLeavesOfType(HOME_VIEW_TYPE),
+        ...this.app.workspace.getLeavesOfType(DIARY_VIEW_TYPE),
+        ...this.app.workspace.getLeavesOfType("markdown"),
+        this.app.workspace.activeLeaf,
+      ].filter(Boolean))
+    );
+  }
+
   getHobbitLeaf() {
+    const leaves = this.getWorkspaceLeaves();
+    if (
+      this.hobbitLeaf &&
+      leaves.includes(this.hobbitLeaf) &&
+      this.isHobbitLeaf(this.hobbitLeaf)
+    ) {
+      return this.hobbitLeaf;
+    }
+
+    this.hobbitLeaf = null;
     const activeLeaf = this.app.workspace.activeLeaf;
-    if (this.isHobbitLeaf(activeLeaf)) return activeLeaf;
+    if (this.isHobbitLeaf(activeLeaf)) {
+      return this.markHobbitLeaf(activeLeaf);
+    }
 
-    const existingCustomLeaf = [
-      ...this.app.workspace.getLeavesOfType(HOME_VIEW_TYPE),
-      ...this.app.workspace.getLeavesOfType(DIARY_VIEW_TYPE),
-    ].at(0);
-    if (existingCustomLeaf) return existingCustomLeaf;
+    const existingHobbitLeaf = leaves.find((leaf) => this.isHobbitLeaf(leaf));
+    if (existingHobbitLeaf) {
+      return this.markHobbitLeaf(existingHobbitLeaf);
+    }
 
-    const existingDiaryLeaf = this.app.workspace
-      .getLeavesOfType("markdown")
-      .find((leaf) => this.isHobbitLeaf(leaf));
-    if (existingDiaryLeaf) return existingDiaryLeaf;
+    // Recover the dedicated page after a plugin reload while its native diary
+    // editor is active. Only the active daily note is claimed; unrelated tabs
+    // elsewhere in the workspace remain untouched.
+    if (
+      activeLeaf?.view?.getViewType?.() === "markdown" &&
+      activeLeaf.view.file instanceof TFile &&
+      this.getDailyNoteDate(activeLeaf.view.file)
+    ) {
+      return this.markHobbitLeaf(activeLeaf, true);
+    }
 
-    return activeLeaf ?? this.app.workspace.getLeaf(false);
+    // Hobbit owns one dedicated tab. Once created, home, reader and Obsidian's
+    // native Markdown editor all replace the view inside this same leaf.
+    return this.markHobbitLeaf(this.app.workspace.getLeaf("tab"));
+  }
+
+  pruneDuplicateHobbitLeaves(keepLeaf) {
+    for (const leaf of this.getWorkspaceLeaves()) {
+      if (leaf !== keepLeaf && this.isHobbitLeaf(leaf)) leaf.detach();
+    }
   }
 
   async openDiary(path) {
@@ -151,11 +203,13 @@ class HobbitPlugin extends Plugin {
     }
 
     const leaf = this.getHobbitLeaf();
+    this.markHobbitLeaf(leaf);
     await leaf.setViewState({
       type: DIARY_VIEW_TYPE,
       state: { path: file.path },
       active: true,
     });
+    this.pruneDuplicateHobbitLeaves(leaf);
     this.app.workspace.revealLeaf(leaf);
     this.updateMobileFullscreen(leaf);
   }
@@ -163,7 +217,9 @@ class HobbitPlugin extends Plugin {
   async openNativeEditor(file) {
     if (!(file instanceof TFile)) return;
     const leaf = this.getHobbitLeaf();
+    this.markHobbitLeaf(leaf);
     await leaf.openFile(file, { active: true });
+    this.markHobbitLeaf(leaf, true);
 
     // Hobbit's edit entry is explicit: always leave the note in Obsidian's
     // source editor, even when the note was previously opened in reading mode.
@@ -175,6 +231,7 @@ class HobbitPlugin extends Plugin {
       leaf.view?.editor?.focus?.();
     }
 
+    this.pruneDuplicateHobbitLeaves(leaf);
     this.scheduleEditorChromeRefresh();
     this.updateMobileFullscreen(leaf);
   }
@@ -217,6 +274,118 @@ class HobbitPlugin extends Plugin {
       return;
     }
     await this.openNativeEditor(file);
+  }
+
+  async createDiaryForDate(date) {
+    const source = this.getDailyNotesSource();
+    if (!source) {
+      new Notice("请先启用 Obsidian 核心插件“日记”");
+      return;
+    }
+
+    const selectedDate = window.moment(date, "YYYY-MM-DD", true);
+    if (!selectedDate?.isValid?.()) {
+      new Notice("无法识别选中的日期");
+      return;
+    }
+
+    const relativePath = `${selectedDate.format(source.format)}.md`;
+    const path = normalizePath(
+      source.folderPath ? `${source.folderPath}/${relativePath}` : relativePath
+    );
+    const existing = this.app.vault.getAbstractFileByPath(path);
+    if (existing instanceof TFile) {
+      await this.openNativeEditor(existing);
+      return;
+    }
+    if (existing) {
+      new Notice("选中日期的日记路径已被文件夹占用");
+      return;
+    }
+
+    try {
+      const parentPath = path.split("/").slice(0, -1).join("/");
+      if (parentPath) await this.ensureFolder(parentPath);
+      const content = await this.getDailyNoteTemplateContent(source, selectedDate);
+      const file = await this.app.vault.create(path, content);
+      await this.openNativeEditor(file);
+    } catch (error) {
+      const created = this.app.vault.getAbstractFileByPath(path);
+      if (created instanceof TFile) {
+        await this.openNativeEditor(created);
+        return;
+      }
+      console.error("Hobbit 无法创建选中日期的日记", error);
+      new Notice("无法创建这一天的日记，请检查日记文件夹和模板设置");
+    }
+  }
+
+  confirmCreateDiary(date) {
+    return new Promise((resolve) => {
+      const modal = new Modal(this.app);
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+        modal.close();
+      };
+
+      modal.modalEl.classList.add("hobbit-confirm-modal");
+      modal.setTitle("创建这一天的日记？");
+      modal.onOpen = () => {
+        modal.contentEl.replaceChildren();
+        modal.contentEl.append(
+          el("p", "hobbit-confirm-date", formatLongDate(date)),
+          el("p", "hobbit-confirm-copy", "这一天还没有日记，是否现在创建？")
+        );
+        const actions = el("div", "hobbit-confirm-actions");
+        const cancel = button("取消", "hobbit-confirm-button is-secondary");
+        const confirm = button("创建日记", "hobbit-confirm-button is-primary", "pen-line");
+        cancel.addEventListener("click", () => finish(false));
+        confirm.addEventListener("click", () => finish(true));
+        actions.append(cancel, confirm);
+        modal.contentEl.appendChild(actions);
+        confirm.focus();
+      };
+      modal.onClose = () => {
+        if (!settled) {
+          settled = true;
+          resolve(false);
+        }
+      };
+      modal.open();
+    });
+  }
+
+  async getDailyNoteTemplateContent(source, selectedDate) {
+    const templateSetting = source.instance.options?.template;
+    const templatePath =
+      typeof templateSetting === "string"
+        ? normalizePath(templateSetting.trim()).replace(/^\/+|\/+$/g, "")
+        : "";
+    if (!templatePath) return "";
+
+    const candidates = [templatePath];
+    if (!templatePath.toLowerCase().endsWith(".md")) {
+      candidates.push(`${templatePath}.md`);
+    }
+    const templateFile = candidates
+      .map((path) => this.app.vault.getAbstractFileByPath(path))
+      .find((file) => file instanceof TFile);
+    if (!(templateFile instanceof TFile)) return "";
+
+    const raw = await this.app.vault.cachedRead(templateFile);
+    const now = window.moment();
+    const title = selectedDate.format(source.format).split("/").pop();
+    return raw
+      .replace(/\{\{date(?::([^}]+))?\}\}/gi, (_match, format) =>
+        selectedDate.format(format?.trim() || "YYYY-MM-DD")
+      )
+      .replace(/\{\{time(?::([^}]+))?\}\}/gi, (_match, format) =>
+        now.format(format?.trim() || "HH:mm")
+      )
+      .replace(/\{\{title\}\}/gi, title);
   }
 
   getDailyNotesSource() {
@@ -1045,17 +1214,18 @@ class HobbitHomeView extends ItemView {
       if (diaryDates.has(date)) cell.classList.add("has-diary");
       if (date === localDateKey(new Date())) cell.classList.add("is-today");
       if (date === this.dateFilter) cell.classList.add("is-selected");
-      cell.addEventListener("click", () => {
+      cell.addEventListener("click", async () => {
         const entry = this.entries.find((item) => item.date === date);
-        this.calendarOpen = false;
-        this.renderCalendar();
         if (entry) {
+          this.calendarOpen = false;
+          this.renderCalendar();
           void this.plugin.openDiary(entry.file.path);
         } else {
-          this.dateFilter = date;
-          this.filter = "all";
-          this.updateNavState();
-          this.renderList();
+          const shouldCreate = await this.plugin.confirmCreateDiary(date);
+          if (!shouldCreate) return;
+          this.calendarOpen = false;
+          this.renderCalendar();
+          void this.plugin.createDiaryForDate(date);
         }
       });
       grid.appendChild(cell);

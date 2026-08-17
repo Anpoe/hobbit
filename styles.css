@@ -2525,6 +2525,77 @@ body.hobbit-mobile-fullscreen .mobile-navbar {
   }
 }
 
+.hobbit-confirm-modal .modal {
+  max-width: 420px;
+  border: 1px solid rgba(154, 119, 94, 0.2);
+  border-radius: 22px;
+  background: var(--hobbit-bg, #f7f1e7);
+  box-shadow: 0 20px 54px rgba(79, 57, 42, 0.14);
+}
+
+.hobbit-confirm-modal .modal-title {
+  color: var(--hobbit-text, #3e3129);
+  font-family: var(--font-serif);
+}
+
+.hobbit-confirm-date {
+  margin: 8px 0 4px;
+  color: var(--hobbit-accent, #b47d61);
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+}
+
+.hobbit-confirm-copy {
+  margin: 0;
+  color: var(--hobbit-muted, #8f8175);
+  line-height: 1.7;
+}
+
+.hobbit-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.hobbit-confirm-button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 18px;
+  border: 1px solid rgba(154, 119, 94, 0.22);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--hobbit-text, #3e3129);
+  box-shadow: none;
+}
+
+.hobbit-confirm-button.is-primary {
+  border-color: rgba(180, 125, 97, 0.7);
+  color: var(--hobbit-accent, #a96849);
+}
+
+.hobbit-confirm-button:hover,
+.hobbit-confirm-button:focus-visible {
+  border-color: var(--hobbit-accent, #b47d61);
+  background: rgba(180, 125, 97, 0.07);
+  color: var(--hobbit-accent, #a96849);
+}
+
+@media (max-width: 700px) {
+  .hobbit-confirm-modal .modal {
+    width: calc(100vw - 32px);
+  }
+
+  .hobbit-confirm-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 /* Mobile editor + shell final pass.
    Keep Hobbit's companion controls and Obsidian's native Markdown editor in
    the same view: the companion owns its intrinsic height, while the native
