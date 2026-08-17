@@ -47,9 +47,10 @@ class HobbitPlugin extends Plugin {
     this.registerView(HOME_VIEW_TYPE, (leaf) => new HobbitHomeView(leaf, this));
     this.registerView(DIARY_VIEW_TYPE, (leaf) => new HobbitDiaryView(leaf, this));
 
-    const ribbonIcon = this.addRibbonIcon("home", "打开 Hobbit 主页", () => {
+    const ribbonIcon = this.addRibbonIcon("mountain", "打开 Hobbit 主页", () => {
       void this.activateHome();
     });
+    ribbonIcon.classList.add("hobbit-ribbon-icon");
     setHobbitCaveIcon(ribbonIcon);
 
     this.addCommand({
@@ -944,7 +945,7 @@ class HobbitHomeView extends ItemView {
   }
 
   getIcon() {
-    return "home";
+    return "mountain";
   }
 
   async onOpen() {
@@ -1384,7 +1385,7 @@ class HobbitDiaryView extends ItemView {
   }
 
   getIcon() {
-    return "home";
+    return "mountain";
   }
 
   getState() {
@@ -1573,22 +1574,26 @@ class HobbitSettingTab extends PluginSettingTab {
 
 function setHobbitCaveIcon(node) {
   if (!node) return node;
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const svg = node.querySelector("svg") || document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "18");
+  svg.setAttribute("height", "18");
   svg.setAttribute("fill", "none");
   svg.setAttribute("stroke", "currentColor");
-  svg.setAttribute("stroke-width", "1.7");
+  svg.setAttribute("stroke-width", "1.55");
   svg.setAttribute("stroke-linecap", "round");
   svg.setAttribute("stroke-linejoin", "round");
   svg.setAttribute("aria-hidden", "true");
-  svg.classList.add("hobbit-cave-icon");
+  svg.classList.add("svg-icon", "hobbit-cave-icon");
   svg.innerHTML = `
-    <path d="M3 20.25c.85-6.1 4.25-10.5 9-10.5s8.15 4.4 9 10.5" />
-    <path d="M2.5 20.25h19" />
-    <path d="M8.25 20.25v-3.35a3.75 3.75 0 0 1 7.5 0v3.35" />
-    <path d="M12 16.9v3.35" />
+    <path d="M3.2 19.5c.75-5.65 4.05-9.65 8.8-9.65s8.05 4 8.8 9.65" />
+    <path d="M3.2 19.5h17.6" />
+    <path d="M7.7 19.5v-2.35a4.3 4.3 0 0 1 8.6 0v2.35" />
+    <path d="M12 14.35V19.5" />
+    <circle cx="13.45" cy="17.15" r="0.42" fill="currentColor" stroke="none" />
+    <path d="M5.2 16.1l-1.35-1.25m14.95 1.25l1.35-1.25" />
   `;
-  node.replaceChildren(svg);
+  if (!svg.parentElement) node.replaceChildren(svg);
   return node;
 }
 

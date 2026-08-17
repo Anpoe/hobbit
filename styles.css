@@ -64,6 +64,19 @@
   stroke-width: 1.7;
 }
 
+.hobbit-cave-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  overflow: visible;
+  color: currentColor;
+}
+
+.hobbit-ribbon-icon .hobbit-cave-icon {
+  width: 18px;
+  height: 18px;
+}
+
 .hobbit-brand-name {
   font-size: 22px;
   letter-spacing: 0.03em;
