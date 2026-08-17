@@ -47,9 +47,10 @@ class HobbitPlugin extends Plugin {
     this.registerView(HOME_VIEW_TYPE, (leaf) => new HobbitHomeView(leaf, this));
     this.registerView(DIARY_VIEW_TYPE, (leaf) => new HobbitDiaryView(leaf, this));
 
-    this.addRibbonIcon("book-open", "打开 Hobbit 主页", () => {
+    const ribbonIcon = this.addRibbonIcon("home", "打开 Hobbit 主页", () => {
       void this.activateHome();
     });
+    setHobbitCaveIcon(ribbonIcon);
 
     this.addCommand({
       id: "open-home",
@@ -943,7 +944,7 @@ class HobbitHomeView extends ItemView {
   }
 
   getIcon() {
-    return "book-open";
+    return "home";
   }
 
   async onOpen() {
@@ -974,7 +975,7 @@ class HobbitHomeView extends ItemView {
     shell.appendChild(topbar);
     const brand = el("div", "hobbit-brand");
     const brandIcon = el("span", "hobbit-brand-icon");
-    setIcon(brandIcon, "book-open");
+    setHobbitCaveIcon(brandIcon);
     brand.append(brandIcon, el("span", "hobbit-brand-name", "Hobbit"));
     topbar.appendChild(brand);
 
@@ -1383,7 +1384,7 @@ class HobbitDiaryView extends ItemView {
   }
 
   getIcon() {
-    return "book-open";
+    return "home";
   }
 
   getState() {
@@ -1568,6 +1569,27 @@ class HobbitSettingTab extends PluginSettingTab {
           })
       );
   }
+}
+
+function setHobbitCaveIcon(node) {
+  if (!node) return node;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.7");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("aria-hidden", "true");
+  svg.classList.add("hobbit-cave-icon");
+  svg.innerHTML = `
+    <path d="M3 20.25c.85-6.1 4.25-10.5 9-10.5s8.15 4.4 9 10.5" />
+    <path d="M2.5 20.25h19" />
+    <path d="M8.25 20.25v-3.35a3.75 3.75 0 0 1 7.5 0v3.35" />
+    <path d="M12 16.9v3.35" />
+  `;
+  node.replaceChildren(svg);
+  return node;
 }
 
 function el(tag, className, text) {
