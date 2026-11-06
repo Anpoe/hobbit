@@ -1726,8 +1726,7 @@
   }
 }
 
-/* Hobbit mobile polish: keep Obsidian's bottom navigation visible without
-   letting it cover the last piece of diary content. */
+/* Hobbit mobile surface colors and screen-safe spacing. */
 html:has(body.is-mobile.hobbit-mobile-fullscreen) {
   --background-secondary-alt: #f7f2ea !important;
   background: #f7f2ea !important;
@@ -1742,8 +1741,8 @@ html:has(body.is-mobile.theme-dark.hobbit-mobile-fullscreen) {
 
 .hobbit-view-content,
 .hobbit-diary-editor {
-  --hobbit-bottom-nav-space: 96px;
-  --hobbit-safe-top: max(35px, env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px));
+  --hobbit-bottom-nav-space: 0px;
+  --hobbit-safe-top: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px));
   --hobbit-safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px));
 }
 
@@ -1772,8 +1771,8 @@ body.hobbit-mobile-fullscreen .horizontal-main-container {
   background: var(--hobbit-mobile-paper) !important;
 }
 
-body.hobbit-mobile-fullscreen .mobile-navbar {
-  background: color-mix(in srgb, var(--hobbit-mobile-paper) 93%, white 7%) !important;
+body.is-phone.hobbit-mobile-fullscreen .mobile-navbar {
+  display: none !important;
 }
 
 .hobbit-search-toggle {
@@ -2459,8 +2458,7 @@ body.hobbit-mobile-fullscreen .mobile-navbar {
   }
 }
 
-/* Final mobile layout pass: keep archive controls reachable above Obsidian's
-   floating navigation and keep empty/content cards on the same row width. */
+/* Final mobile layout pass: keep archive controls reachable and cards aligned. */
 @media (max-width: 700px) {
   body.is-mobile.hobbit-mobile-fullscreen .hobbit-view-content,
   body.is-mobile.hobbit-mobile-fullscreen .hobbit-diary-editor {
@@ -2946,7 +2944,7 @@ body.hobbit-mobile-fullscreen .mobile-navbar {
   html body.is-mobile.hobbit-mobile-fullscreen .hobbit-view-content,
   html body.is-mobile.hobbit-mobile-fullscreen .hobbit-shell,
   html body.is-mobile.hobbit-mobile-fullscreen .hobbit-reader-shell {
-    --hobbit-bottom-nav-space: 96px;
+    --hobbit-bottom-nav-space: 0px;
     --background-primary: var(--hobbit-mobile-paper) !important;
     --background-primary-alt: var(--hobbit-mobile-paper) !important;
     --background-secondary: var(--hobbit-mobile-paper) !important;

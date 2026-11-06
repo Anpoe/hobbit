@@ -97,6 +97,18 @@ class HobbitPlugin extends Plugin {
         this.updateMobileFullscreen();
       })
     );
+    // Obsidian restores its navigation (and OS status bar) on taps and scrolls.
+    // Keep both hidden while Hobbit owns the phone viewport.
+    const fullscreenObserver = new MutationObserver(() => {
+      if (this.hobbitNativeFullscreenOwned) {
+        this.updateNativeMobileFullscreen(true);
+      }
+    });
+    fullscreenObserver.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    this.register(() => fullscreenObserver.disconnect());
     this.updateMobileFullscreen();
     this.scheduleEditorChromeRefresh();
   }
@@ -688,27 +700,24 @@ class HobbitPlugin extends Plugin {
 
     if (!shouldEnter || !isPhone) {
       body.classList.remove("hobbit-native-fullscreen");
-      if (!isPhone && !this.hobbitNativeFullscreenOwned) return;
       if (!this.hobbitNativeFullscreenOwned) return;
+      this.hobbitNativeFullscreenOwned = false;
       if (typeof mobileNavbar?.restoreNavigation === "function") {
         body.classList.add("is-hidden-nav");
         mobileNavbar.restoreNavigation(false);
       } else {
         body.classList.remove("is-hidden-nav");
       }
-      this.hobbitNativeFullscreenOwned = false;
       return;
     }
 
     if (shouldEnter) {
-      if (this.hobbitNativeFullscreenOwned) {
-        body.classList.remove("is-hidden-nav");
+      if (this.hobbitNativeFullscreenOwned && body.classList.contains("is-hidden-nav")) {
         return;
       }
       if (typeof mobileNavbar?.hideNavigation !== "function") return;
 
-      // Reuse Obsidian's native full-screen transition for the warm edge-to-edge
-      // background, then keep the native floating navigation visible.
+      // The native transition hides both the floating navigation and OS status bar.
       try {
         mobileNavbar.hideNavigation();
       } catch (error) {
@@ -717,18 +726,6 @@ class HobbitPlugin extends Plugin {
       }
       this.hobbitNativeFullscreenOwned = true;
       body.classList.add("hobbit-native-fullscreen");
-      body.classList.remove("is-hidden-nav");
-
-      const keepNavigationVisible = () => {
-        if (
-          this.hobbitNativeFullscreenOwned &&
-          body.classList.contains("hobbit-native-fullscreen")
-        ) {
-          body.classList.remove("is-hidden-nav");
-        }
-      };
-      window.setTimeout(keepNavigationVisible, 0);
-      window.setTimeout(keepNavigationVisible, 120);
       return;
     }
   }
