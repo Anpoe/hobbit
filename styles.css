@@ -1771,12 +1771,13 @@ body.hobbit-mobile-fullscreen .horizontal-main-container {
   background: var(--hobbit-mobile-paper) !important;
 }
 
-body.is-phone.hobbit-mobile-fullscreen:not(.hobbit-home-navigation) .mobile-navbar {
+body.is-phone.hobbit-mobile-fullscreen:not(.hobbit-home-navigation) .mobile-navbar,
+body.is-phone.hobbit-mobile-fullscreen.hobbit-home-navigation-hidden .mobile-navbar {
   display: none !important;
 }
 
 /* Expose home navigation while retaining native full-screen status-bar control. */
-body.is-phone.hobbit-mobile-fullscreen.hobbit-home-navigation .mobile-navbar {
+body.is-phone.hobbit-mobile-fullscreen.hobbit-home-navigation:not(.hobbit-home-navigation-hidden) .mobile-navbar {
   opacity: 1 !important;
   transform: none !important;
   background: color-mix(in srgb, var(--hobbit-mobile-paper) 93%, white 7%) !important;

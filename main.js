@@ -690,6 +690,10 @@ class HobbitPlugin extends Plugin {
       viewType === HOME_VIEW_TYPE || viewType === DIARY_VIEW_TYPE || isDiaryMarkdown;
     document.body?.classList.toggle("hobbit-mobile-fullscreen", isHobbitView);
     document.body?.classList.toggle("hobbit-home-navigation", viewType === HOME_VIEW_TYPE);
+    document.body?.classList.toggle(
+      "hobbit-home-navigation-hidden",
+      viewType === HOME_VIEW_TYPE && Boolean(view.navigationHidden)
+    );
     this.updateNativeMobileFullscreen(isHobbitView);
   }
 
@@ -932,6 +936,8 @@ class HobbitHomeView extends ItemView {
     this.calendarDate = new Date();
     this.calendarOpen = false;
     this.entries = [];
+    this.navigationHidden = false;
+    this.navigationScrollTop = 0;
   }
 
   getViewType() {
@@ -947,8 +953,27 @@ class HobbitHomeView extends ItemView {
   }
 
   async onOpen() {
+    this.registerDomEvent(this.contentEl, "scroll", () => this.onHomeScroll(), {
+      passive: true,
+    });
     this.render();
     await this.refresh();
+  }
+
+  onHomeScroll() {
+    if (
+      !document.body?.classList.contains("is-phone") ||
+      this.app.workspace.activeLeaf?.view !== this
+    ) return;
+
+    // Clamp elastic overscroll so a bottom-edge bounce cannot reveal the bar.
+    const maxScrollTop = Math.max(0, this.contentEl.scrollHeight - this.contentEl.clientHeight);
+    const scrollTop = Math.max(0, Math.min(this.contentEl.scrollTop, maxScrollTop));
+    const delta = scrollTop - this.navigationScrollTop;
+    if (scrollTop > 0 && Math.abs(delta) < 6) return;
+    this.navigationScrollTop = scrollTop;
+    this.navigationHidden = scrollTop > 0 && delta > 0;
+    this.plugin.updateMobileFullscreen();
   }
 
   async onClose() {
