@@ -98,7 +98,7 @@ class HobbitPlugin extends Plugin {
       })
     );
     // Obsidian restores its navigation (and OS status bar) on taps and scrolls.
-    // Keep both hidden while Hobbit owns the phone viewport.
+    // Keep the OS status bar hidden; CSS exposes navigation on the home page.
     const fullscreenObserver = new MutationObserver(() => {
       if (this.hobbitNativeFullscreenOwned) {
         this.updateNativeMobileFullscreen(true);
@@ -689,6 +689,7 @@ class HobbitPlugin extends Plugin {
     const isHobbitView =
       viewType === HOME_VIEW_TYPE || viewType === DIARY_VIEW_TYPE || isDiaryMarkdown;
     document.body?.classList.toggle("hobbit-mobile-fullscreen", isHobbitView);
+    document.body?.classList.toggle("hobbit-home-navigation", viewType === HOME_VIEW_TYPE);
     this.updateNativeMobileFullscreen(isHobbitView);
   }
 

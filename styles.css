@@ -1771,8 +1771,15 @@ body.hobbit-mobile-fullscreen .horizontal-main-container {
   background: var(--hobbit-mobile-paper) !important;
 }
 
-body.is-phone.hobbit-mobile-fullscreen .mobile-navbar {
+body.is-phone.hobbit-mobile-fullscreen:not(.hobbit-home-navigation) .mobile-navbar {
   display: none !important;
+}
+
+/* Expose home navigation while retaining native full-screen status-bar control. */
+body.is-phone.hobbit-mobile-fullscreen.hobbit-home-navigation .mobile-navbar {
+  opacity: 1 !important;
+  transform: none !important;
+  background: color-mix(in srgb, var(--hobbit-mobile-paper) 93%, white 7%) !important;
 }
 
 .hobbit-search-toggle {
@@ -2928,7 +2935,7 @@ body.is-phone.hobbit-mobile-fullscreen .mobile-navbar {
 
 /* Final phone viewport behavior.
    Hobbit keeps Obsidian's native editor and native keyboard toolbar, while
-   removing the floating app navigation that previously covered content. */
+   reserving space for floating app navigation on the home page only. */
 @media (max-width: 700px) {
   html:has(body.is-mobile.hobbit-mobile-fullscreen),
   html body.is-mobile.hobbit-mobile-fullscreen,
@@ -2958,6 +2965,10 @@ body.is-phone.hobbit-mobile-fullscreen .mobile-navbar {
   body.is-mobile.hobbit-mobile-fullscreen .hobbit-view-content {
     min-height: 100% !important;
     padding-bottom: calc(var(--hobbit-bottom-nav-space) + var(--hobbit-safe-bottom)) !important;
+  }
+
+  body.is-phone.hobbit-mobile-fullscreen.hobbit-home-navigation .hobbit-view-content {
+    --hobbit-bottom-nav-space: 96px;
   }
 
   body.is-mobile.hobbit-mobile-fullscreen .hobbit-main {
